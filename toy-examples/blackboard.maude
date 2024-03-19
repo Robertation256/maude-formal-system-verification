@@ -3,9 +3,9 @@ mod BLACKBOARD is
     sort Blackboard . 
     subsort Nat < Blackboard .
 
-    op __: Blackboard Blackboard -> Blackboard [ctor comm assoc] .
+    op __ : Blackboard Blackboard -> Blackboard [ctor comm assoc] .
     
-    vars N M: Nat .
+    vars N M : Nat .
 
-    rl [replace]: N M => (N + M) quo 2 .
+    rl [replace] : N M => (N + M) quo 2 .
 endm
