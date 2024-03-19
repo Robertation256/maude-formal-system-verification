@@ -1,0 +1,11 @@
+mod BLACKBOARD is
+    protecting NAT .
+    sort Blackboard . 
+    subsort NAT < Blackboard .
+
+    op __: Blackboard Blackboard -> Blackboard [ctor comm assoc] .
+    
+    vars N M: Nat .
+
+    rl [replace]: N M => (N + M) quo 2 .
+endm
