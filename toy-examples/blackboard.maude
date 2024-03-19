@@ -1,7 +1,7 @@
 mod BLACKBOARD is
-    protecting NAT .
+    protecting Nat .
     sort Blackboard . 
-    subsort NAT < Blackboard .
+    subsort Nat < Blackboard .
 
     op __: Blackboard Blackboard -> Blackboard [ctor comm assoc] .
     
