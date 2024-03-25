@@ -22,10 +22,10 @@ mod MEMCACHE is
     op setRequest : Oid Oid Nat String String -> Msg [ctor] . *** senderID, receiverID, sessionID, key, value
     op setResponse : Oid Oid Nat -> Msg [ctor] . *** senderID, receiverID, sessionID
 
-    vars client-0, memcache-0 : Oid .
+    vars client-0 memcache-0 : Oid .
     var datastore-0 : Map{String, String} .
     var sessionID-0 : Nat .
-    vars key-0, value-0 : String .
+    vars key-0 value-0 : String .
     var nil : NilResult .
 
 
