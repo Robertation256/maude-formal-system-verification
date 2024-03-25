@@ -3,7 +3,7 @@ fmod LOOKUP-RESULT is
     protecting STRING .
     sorts NilResult LookupResult .
     subsorts NilResult String < LookupResult .
-endfm
+endfm .
 
 mod MEMCACHE is 
     protecting NAT STRING .
