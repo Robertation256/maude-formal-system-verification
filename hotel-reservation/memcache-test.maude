@@ -1,0 +1,21 @@
+mod MEMCACHE-TEST is 
+    protecting MEMCACHE .
+    protecting CONFIGURATION .
+
+    op testConfig : -> Configuration .
+
+    op data : -> Map{String, String} .
+
+    eq data =
+        insert ("a", "A", 
+            insert("b", "B", 
+                insert("c", "C", empty)
+            )
+        ) .
+
+
+    eq testConfig =
+        < MEMCACHE-0 : MemcacheServer | datastore : data>
+        getRequest(CLIENT-0, MEMCACHE-0, 1, "a") .
+
+endm
