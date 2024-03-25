@@ -1,0 +1,17 @@
+fmod STRING-STRING-MAP is
+    protecting MAP{String, String} .
+endfm
+
+
+--- mod MEMCACHE is 
+---     protecting NAT BOOL STRING STRING-STRING-MAP.
+---     including CONFIGURATION .
+---     op MemCacheServer : -> Cid [ctor] . 
+---     op map :_ : Map{String, String} -> Attribute [ctor gather (&)] . 
+---     op getKeyRequest : Oid Oid Nat String -> Msg [ctor] . 
+---     op getKeyResponse : Oid Oid Nat String Bool -> Msg [ctor] .
+---     op setKeyRequest : Oid Oid Nat String String -> Msg [ctor] .
+---     op setKeyResponse : Oid Oid Nat Bool -> Msg [ctor] . 
+
+
+--- endm
