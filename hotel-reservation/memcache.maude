@@ -1,17 +1,45 @@
-fmod STRING-STRING-MAP is
-    protecting MAP{String, String} .
+
+fmod LOOKUP-RESULT is
+    protecting STRING .
+    sorts NilResult LookupResult .
+    subsorts NilResult String < LookupResult .
 endfm
 
+mod MEMCACHE is 
+    protecting NAT BOOL STRING MAP{String, String}  LOOKUP-RESULT .
+    including CONFIGURATION .
 
---- mod MEMCACHE is 
----     protecting NAT BOOL STRING STRING-STRING-MAP.
----     including CONFIGURATION .
----     op MemCacheServer : -> Cid [ctor] . 
----     op map :_ : Map{String, String} -> Attribute [ctor gather (&)] . 
----     op getKeyRequest : Oid Oid Nat String -> Msg [ctor] . 
----     op getKeyResponse : Oid Oid Nat String Bool -> Msg [ctor] .
----     op setKeyRequest : Oid Oid Nat String String -> Msg [ctor] .
----     op setKeyResponse : Oid Oid Nat Bool -> Msg [ctor] . 
+    *** class definition
+    op MemcacheServer : -> Cid [ctor] . 
+    op datastore :_ : Map{String, String} -> Attribute [ctor] . 
+
+    *** messages
+    op getRequest : Oid Oid Nat String -> Msg [ctor] .  *** senderID, receiverID, sessionID, key
+    op getResponse : Oid Oid Nat LookupResult -> Msg [ctor] . *** senderID, receiverID, sessionID, value
+    op setRequest : Oid Oid Nat String String -> Msg [ctor] . *** senderID, receiverID, sessionID, key, value
+    op setResponse : Oid Oid Nat -> Msg [ctor] . *** senderID, receiverID, sessionID
+
+    vars client-0, memcache-0 : Oid .
+    var datastore-0 : Map{String, String} .
+    var sessionID-0 : Nat .
+    vars key-0, value-0 : String .
+    var nil : NilResult .
 
 
---- endm
+    rl [handle-get] : 
+        < memcache-0 : MemcacheServer | datastore : datastore-0 >
+        getRequest(client-0, memcache-0, sessionID-0, key-0)
+        => if datastore-0[key-0] == undefined
+                then getResponse(memcache-0, client-0, sessionID-0, nil)
+                else getResponse(memcache-0, client-0, sessionID-0, datastore-0[key-0])
+
+           fi .
+
+    rl [handle-set] :
+        < memcache-0 : MemcacheServer | datastore : datastore-0 >
+        setRequest(client-0, memcache-0, sessionID-0, key-0, value-0 )
+        =>
+        < memcache-0 : MemcacheServer | datastore : insert(key-0, value-0, datastore-0) >
+        setResponse(memcache-0, client-0, sessionID-0) .
+
+endm
