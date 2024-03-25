@@ -6,7 +6,8 @@ fmod LOOKUP-RESULT is
 endfm
 
 mod MEMCACHE is 
-    protecting NAT BOOL STRING MAP{String, String}  LOOKUP-RESULT .
+    protecting NAT STRING .
+    protecting MAP{String, String}  LOOKUP-RESULT .
     including CONFIGURATION .
 
     *** class definition
