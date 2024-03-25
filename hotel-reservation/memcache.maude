@@ -3,6 +3,9 @@ fmod LOOKUP-RESULT is
     protecting STRING .
     sorts NilResult LookupResult .
     subsorts NilResult String < LookupResult .
+
+    op nil : -> NilResult .
+    
 endfm 
 
 mod MEMCACHE is 
@@ -16,6 +19,8 @@ mod MEMCACHE is
     op MemcacheServer : -> Cid [ctor] . 
     op datastore :_ : Map{String, String} -> Attribute [ctor] . 
 
+    
+
     *** messages
     op getRequest : Oid Oid Nat String -> Msg [ctor] .  *** senderID, receiverID, sessionID, key
     op getResponse : Oid Oid Nat LookupResult -> Msg [ctor] . *** senderID, receiverID, sessionID, value
@@ -26,7 +31,6 @@ mod MEMCACHE is
     var datastore-0 : Map{String, String} .
     var sessionID-0 : Nat .
     vars key-0 value-0 : String .
-    var nil : NilResult .
 
 
     rl [handle-get] : 
