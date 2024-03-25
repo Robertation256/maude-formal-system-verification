@@ -3,6 +3,7 @@ mod MEMCACHE-TEST is
     protecting CONFIGURATION .
 
     op testConfig : -> Configuration .
+    ops CLIENT-0 MEMCACHE-0 : -> Oid .
 
     op data : -> Map{String, String} .
 
