@@ -1,0 +1,52 @@
+
+fmod LOOKUP-RESULT is
+    protecting STRING .
+    sorts NilResult LookupResult .
+    subsorts NilResult String < LookupResult .
+
+    op nil : -> NilResult .
+    
+endfm 
+
+mod MEMCACHE is 
+    protecting NAT .
+    protecting STRING .
+    protecting MAP{String, String} .
+    protecting LOOKUP-RESULT .
+    including CONFIGURATION .
+
+    *** class definition
+    op MemcacheServer : -> Cid [ctor] . 
+    op datastore :_ : Map{String, String} -> Attribute [ctor] . 
+
+    
+
+    *** messages
+    op getRequest : Oid Oid Nat String -> Msg [ctor] .  *** senderID, receiverID, sessionID, key
+    op getResponse : Oid Oid Nat LookupResult -> Msg [ctor] . *** senderID, receiverID, sessionID, value
+    op setRequest : Oid Oid Nat String String -> Msg [ctor] . *** senderID, receiverID, sessionID, key, value
+    op setResponse : Oid Oid Nat -> Msg [ctor] . *** senderID, receiverID, sessionID
+
+    vars client-0 memcache-0 : Oid .
+    var datastore-0 : Map{String, String} .
+    var sessionID-0 : Nat .
+    vars key-0 value-0 : String .
+
+
+    rl [handle-get] : 
+        < memcache-0 : MemcacheServer | datastore : datastore-0 >
+        getRequest(client-0, memcache-0, sessionID-0, key-0)
+        => if datastore-0[key-0] == undefined
+                then getResponse(memcache-0, client-0, sessionID-0, nil)
+                else getResponse(memcache-0, client-0, sessionID-0, datastore-0[key-0])
+
+           fi .
+
+    rl [handle-set] :
+        < memcache-0 : MemcacheServer | datastore : datastore-0 >
+        setRequest(client-0, memcache-0, sessionID-0, key-0, value-0 )
+        =>
+        < memcache-0 : MemcacheServer | datastore : insert(key-0, value-0, datastore-0) >
+        setResponse(memcache-0, client-0, sessionID-0) .
+
+endm
