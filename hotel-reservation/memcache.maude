@@ -1,9 +1,9 @@
 
-fmod LOOKUP-RESULT is
+mod LOOKUP-RESULT is
     protecting STRING .
     sorts NilResult LookupResult .
     subsorts NilResult String < LookupResult .
-endfm .
+endm 
 
 mod MEMCACHE is 
     protecting NAT STRING .
