@@ -16,7 +16,7 @@ mod MEMCACHE-TEST is
 
 
     eq testConfig =
-        < MEMCACHE-0 : MemcacheServer | datastore : data>
+        < MEMCACHE-0 : MemcacheServer | datastore : data >
         getRequest(CLIENT-0, MEMCACHE-0, 1, "a") .
 
 endm
