@@ -2,7 +2,7 @@ mod MEMCACHE-TEST is
     protecting MEMCACHE .
     protecting CONFIGURATION .
 
-    op testConfig : -> Configuration .
+    ops testGet0 testGet1 testSet : -> Configuration .
     ops CLIENT-0 MEMCACHE-0 : -> Oid .
 
     op data : -> Map{String, String} .
@@ -15,8 +15,16 @@ mod MEMCACHE-TEST is
         ) .
 
 
-    eq testConfig =
+    eq testGet0 =
         < MEMCACHE-0 : MemcacheServer | datastore : data >
         getRequest(CLIENT-0, MEMCACHE-0, 1, "a") .
+
+    eq testGet1 =
+        < MEMCACHE-0 : MemcacheServer | datastore : data >
+        getRequest(CLIENT-0, MEMCACHE-0, 1, "z") .
+
+    eq testSet =
+        < MEMCACHE-0 : MemcacheServer | datastore : data >
+        setRequest(CLIENT-0, MEMCACHE-0, 1, "d", "D") .
 
 endm
