@@ -1,0 +1,73 @@
+*** we have two tables 
+*** reservation(hotel_id, customer_name, in_date, out_date, #reserved_rooms)
+*** hotel_capacity(hotel_id, capacity)
+
+
+mod HOTEL-TABLE is
+    protecting NAT . 
+    protecting OPTION{Nat} .
+
+
+    sort HotelEntry HotelTable .
+    subsort  HotelEntry  < HotelTable .
+
+    op emptyHotelTable : -> HotelTable [ctor].
+    op hotelEntry : Nat Nat -> HotelEntry [ctor].
+
+    *** communtative since mongodb return results in arbitrary order
+    op _,_ : HotelTable HotelTable -> HotelTable    [ctor comm assoc id: emptyHotelTable] .
+
+
+    op getHotelId : HotelEntry -> Nat .
+    op getHotelCap : HotelEntry -> Nat .
+    
+    op insertHotel : Nat Nat HotelTable -> HotelTable .
+    op getHotelCapacityById : Nat HotelTable -> Option{Nat} .
+
+    *** todo: support lookup by multiple ids
+
+    vars hotel_id hotel_id' hotel_cap : Nat .
+    var hotel_table : HotelTable .
+
+
+    eq getHotelId(hotelEntry(hotel_id, hotel_cap))
+        = hotel_id .
+
+    eq getHotelCap(hotelEntry(hotel_id, hotel_cap))
+        = hotel_cap .
+
+    eq insertHotel(hotel_id, hotel_cap, hotel_table) 
+        = (hotel_table , hotelEntry(hotel_id, hotel_cap)) .
+
+
+    
+    eq getHotelCapacityById(hotel_id, emptyHotelTable) = none .
+
+    
+    eq getHotelCapacityById(hotel_id, (hotelEntry(hotel_id', hotel_cap), hotel_table))
+        = if hotel_id == hotel_id' then hotel_cap
+          else getHotelCapacityById(hotel_id, hotel_table) fi .
+endm
+
+
+
+mod HOTEL-TABLE-TEST is 
+    protecting HOTEL-TABLE .
+
+    op testTable : -> HotelTable .
+
+    eq testTable = insertHotel(1, 100, 
+        insertHotel(2, 200, 
+            insertHotel(3, 300, emptyHotelTable)
+        )
+    ) .
+
+endm
+
+
+
+
+
+
+
+
