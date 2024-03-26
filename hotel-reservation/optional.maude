@@ -1,5 +1,0 @@
-fmod OPTION{X :: TRIV} is
-    sort Option{X} .
-    op none : -> OPTION{X} .
-    op some : X -> OPTION{X} .
-endfm
