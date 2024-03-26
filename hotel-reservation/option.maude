@@ -1,5 +1,5 @@
 fmod OPTION{X :: TRIV} is
     sort Option{X} .
-    op none : -> Option{X} .
-    op some : X -> Option{X} .
+    subsort X$Elt < Option{X} .
+    op none : -> Option{X} [ctor].
 endfm

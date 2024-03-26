@@ -45,7 +45,7 @@ mod HOTEL-TABLE is
 
     
     eq getHotelCapacityById(hotel_id, (hotelEntry(hotel_id', hotel_cap), hotel_table))
-        = if hotel_id == hotel_id' then some(hotel_cap)
+        = if hotel_id == hotel_id' then hotel_cap
           else getHotelCapacityById(hotel_id, hotel_table) fi .
 endm.
 

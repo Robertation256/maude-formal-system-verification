@@ -28,7 +28,7 @@ mod MEMCACHE is
         getRequest(client-0, memcache-0, sessionID-0, key-0)
         => if datastore-0[key-0] == undefined
                 then getResponse(memcache-0, client-0, sessionID-0, none)
-                else getResponse(memcache-0, client-0, sessionID-0, some(datastore-0[key-0]))
+                else getResponse(memcache-0, client-0, sessionID-0, datastore-0[key-0])
 
            fi .
 
