@@ -37,7 +37,7 @@ mod HOTEL-TABLE is
         = hotel_cap .
 
     eq insertHotel(hotel_id, hotel_cap, hotel_table) 
-        = (hotel_table , hotelEntry(hotel_id, hotel_cap))
+        = (hotel_table , hotelEntry(hotel_id, hotel_cap)) .
 
 
     
