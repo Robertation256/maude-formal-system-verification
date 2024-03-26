@@ -58,7 +58,7 @@ mod HOTEL-TABLE-TEST is
 
     eq testTable = insertHotel(1, 100, 
         insertHotel(2, 200, 
-            insertHotel(3, 300), emptyHotelTable
+            insertHotel(3, 300, emptyHotelTable)
         )
     ) .
 
