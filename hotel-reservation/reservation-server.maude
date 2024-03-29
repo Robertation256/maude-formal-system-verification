@@ -1,0 +1,69 @@
+
+mod RESERVATION-SERVER is
+
+    protecting NAT .
+    protecting MEMCACHE .
+    protecting MONGODB .
+    protecting OPTION{Nat} .
+
+    including CONFIGURATION .
+
+    sort Continuation .
+
+
+        *** class definition
+    op ReservationServer : -> Cid [ctor] . 
+    op memcache :_ : Oid -> Attribute [ctor] . 
+    op mongodb :_ : Oid -> Attribute [ctor] . 
+
+    
+
+    *** messages
+    op reservationRequest : Oid Oid Nat String Nat Nat Nat Nat -> Msg [ctor] .  *** sender_id, receiver_id, session_id,  customer_name, hotel_id, in_date, out_date, room_count
+    op reservationResponse : Oid Oid Nat Option{Nat} -> Msg [ctor] . *** sender_id, receiver_id, session_id, hotel_id (none if reservation failed)
+
+
+
+    *** server function components
+    op threadState: Oid Oid String Nat Nat Nat Nat -> Continuation .  *** server_id, client_id, customer_name, hotel_id, in_date, out_date, room_count
+
+
+
+    vars client-id server-id memcache-id mongodb-id : Oid .
+    var customer-name : String .
+    vars session-id hotel-id in-date out-date room-count : Nat .
+
+    *** return none if in_date >= out_date, or requests zero rooms
+    crl [invalid-request] :
+        <server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id >
+        reservationRequest(client-id, server-id, session-id, customer_name, hotel-id, in-date, out-date, room-count)
+        => 
+        reservationResponse(server-id, client-id, session-id, none) 
+        if (in-date >= out-date) _or_ (room-count = 0) .
+
+
+    crl [valid-request] :
+        <server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id >
+        reservationRequest(client-id, server-id, customer_name, hotel-id, in-date, out-date, room-count)
+        => 
+        capacityCheck(server-id, client-id, session-id, customer-name, hotel-id, in-date, out-date, room-count) 
+        if (in-date < out-date) _and_ (room-count > 0) .
+
+
+    crl []
+
+    
+
+
+
+
+
+
+
+
+
+
+    
+
+
+endm
