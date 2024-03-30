@@ -83,11 +83,11 @@ mod RESERVATION-TABLE is
     op insertReservation : Nat String Nat Nat Nat Reservations -> Reservations .
 
     vars hotel_id in_date out_date room_count : Nat .
-    var customer_name String .
+    var customer_name : String .
     var reservation_table : Reservations .
 
     eq insertReservation(hotel_id, customer_name, in_date, out_date, room_count, reservation_table) 
-        = (reservation_table , reservation(hotel_id, customer_name, in_date, out_date, room_count, reservation_table)) .
+        = (reservation_table, reservation(hotel_id, customer_name, in_date, out_date, room_count)) .
 
 
 endm 
@@ -97,7 +97,7 @@ mod MONGODB is
     protecting NAT .
     protecting STRING .
     protecting HOTEL-TABLE .
-    protecting RSERVATION-TABLE .
+    protecting RESERVATION-TABLE .
     including CONFIGURATION .
 
 
