@@ -1,0 +1,23 @@
+mod SERVER-TEST is
+    protecting RESERVATION-SERVER .
+
+
+
+    op test0 : -> Configuration .
+
+
+    ops client-0 server-0 memcache-0 mongodb-0 : -> Oid .
+
+    
+
+    eq test0 = 
+        reservationRequest(client-0, server-0, 0, "John Doe", 0, 0, 0, 0)
+        < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0 >
+        < memcache-0 : MemcacheServer | datastore : empty >
+        < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : empty > .
+
+
+
+
+
+endm

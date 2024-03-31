@@ -19,10 +19,11 @@ mod HOTEL-TABLE is
 
 
     op getHotelId : Hotel -> Nat .
-    op getHotelCap : Hotel -> Nat .
+    op getHotelCap : Hotels -> Nat .
+
     
     op insertHotel : Nat Nat Hotels -> Hotels .
-    op getHotelCapacityById : Nat Hotels -> Option{Nat} .
+    op getHotel : Nat Hotels -> Hotels .    *** get a hotel by id
 
     *** todo: support lookup by multiple ids
 
@@ -30,23 +31,23 @@ mod HOTEL-TABLE is
     var hotel_table : Hotels .
 
 
-    eq getHotelId(hotel(hotel_id, hotel_cap))
-        = hotel_id .
+    *** find one hotel that match the hotel_id
+    eq getHotel(hotel_id, empty) = empty .
+    ceq getHotel(hotel_id, (hotel(hotel_id', hotel_cap), hotel_table)) 
+        = hotel(hotel_id', hotel_cap) if hotel_id == hotel_id' .
+    
+    ceq getHotel(hotel_id, (hotel(hotel_id', hotel_cap), hotel_table)) 
+        = getHotel(hotel_id, hotel_table) if hotel_id =/= hotel_id' .
 
-    eq getHotelCap(hotel(hotel_id, hotel_cap))
-        = hotel_cap .
+    *** return cap projection from a non-emtpy multiset
+    eq getHotelCap((hotel(hotel_id, hotel_cap), hotel_table)) = hotel_cap .
+
 
     eq insertHotel(hotel_id, hotel_cap, hotel_table) 
         = (hotel_table , hotel(hotel_id, hotel_cap)) .
 
 
-    
-    eq getHotelCapacityById(hotel_id, empty) = none .
 
-    
-    eq getHotelCapacityById(hotel_id, (hotel(hotel_id', hotel_cap), hotel_table))
-        = if hotel_id == hotel_id' then hotel_cap
-          else getHotelCapacityById(hotel_id, hotel_table) fi .
 endm
 
 
@@ -80,14 +81,25 @@ mod RESERVATION-TABLE is
 
 
 
-    op insertReservation : Nat String Nat Nat Nat Reservations -> Reservations .
+    op filterReservation : Nat Nat Reservations -> Reservations . *** filter by hotel_id and date
+    op countTotalOccupancy : Reservations -> Nat .   *** sum all room count  
 
-    vars hotel_id in_date out_date room_count : Nat .
+    vars hotel_id hotel_id' in_date in_date' out_date room_count : Nat .
     var customer_name : String .
     var reservation_table : Reservations .
 
-    eq insertReservation(hotel_id, customer_name, in_date, out_date, room_count, reservation_table) 
-        = (reservation_table, reservation(hotel_id, customer_name, in_date, out_date, room_count)) .
+
+    eq filterReservation(hotel_id, in_date, empty) = empty .
+    ceq filterReservation(hotel_id, in_date, (reservation(hotel_id', customer_name, in_date', out_date, room_count), reservation_table))
+        = filterReservation(hotel_id, in_date, reservation_table) if (hotel_id =/= hotel_id') or (in_date =/= in_date') .
+    ceq filterReservation(hotel_id, in_date, (reservation(hotel_id', customer_name, in_date', out_date, room_count), reservation_table))
+        = reservation(hotel_id', customer_name, in_date', out_date, room_count) ,  filterReservation(hotel_id, in_date, reservation_table) 
+        if (hotel_id == hotel_id') and (in_date == in_date') .
+
+
+    eq countTotalOccupancy(empty) = 0 .
+    eq countTotalOccupancy((reservation(hotel_id, customer_name, in_date, out_date, room_count), reservation_table))
+        = room_count + countTotalOccupancy(reservation_table) .
 
 
 endm 
@@ -102,10 +114,54 @@ mod MONGODB is
 
 
 
-        *** class definition
-    op DatabaseServer : -> Cid [ctor] . 
+    *** class definition
+    op MongDBServer : -> Cid [ctor] . 
     op hotelTable :_ : Hotels -> Attribute [ctor] . 
     op reservationTable :_ : Reservations -> Attribute [ctor] .
+
+
+
+    *** messages
+    *** select reservations by hotel-id and date
+    op reservationQueryRequest : Oid Oid Nat Nat Nat -> Msg [ctor] . *** server-id, mongodb-id, session-id, hotel-id, date
+    op reservationQueryResponse : Oid Oid Nat Reservations -> Msg [ctor] . *** mongodb-id, server-id session-id, reservations
+
+
+    op hotelQueryRequest : Oid Oid Nat Nat -> Msg [ctor] . *** server-id, mongo-db-id, session-id, hotel-id
+    op hotelQueryResponse : Oid Oid Nat Hotels -> Msg [ctor] . *** mongodb-id, server-id session-id, hotels
+
+    op insertReservationRequest : Oid Oid Nat Reservation -> Msg [ctor] . *** server-id, mongo-db-id, session-id, reservation
+    op insertReservationResponse : Oid Oid Nat Bool -> Msg [ctor] . *** mongodb-id, server-id, session-id, is-sucessful
+
+    vars server-id mongodb-id : Oid .
+    vars session-id hotel-id date : Nat .
+    var reservation-table : Reservations .
+    var reservation-0 : Reservation .
+    var hotel-table : Hotels .
+
+
+
+    rl [query-reservation] : 
+        reservationQueryRequest(server-id, mongodb-id, session-id, hotel-id, date)
+        < mongodb-id : MongDBServer | reservationTable : reservation-table >
+        => 
+        reservationQueryResponse(mongodb-id, server-id, session-id, filterReservation(hotel-id, date, reservation-table))
+        < mongodb-id : MongDBServer | reservationTable : reservation-table > .
+
+    rl [query-hotel] :
+        hotelQueryRequest(server-id, mongodb-id, session-id, hotel-id)
+        < mongodb-id : MongDBServer | hotelTable : hotel-table >
+        =>
+        hotelQueryResponse(mongodb-id, server-id, session-id, getHotel(hotel-id, hotel-table))
+        < mongodb-id : MongDBServer | hotelTable : hotel-table > .
+
+    
+    rl [insert-reservation] :
+        insertReservationRequest(server-id, mongodb-id, session-id, reservation-0)
+        < mongodb-id : MongDBServer | reservationTable : reservation-table >
+        =>
+        insertReservationResponse(mongodb-id, server-id, session-id, true) *** todo: allow failure to happen
+        < mongodb-id : MongDBServer | reservationTable : (reservation-table, reservation-0) > .
 
 
 
