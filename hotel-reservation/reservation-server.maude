@@ -203,7 +203,8 @@ mod RESERVATION-SERVER is
                     outDate : out-date ,
                     dateIter : date-iter ,       
                     roomCount : room-count ,
-                    map : insert(formatKey(hotel-id, date-iter),  cacheLookupResult + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
+                    *** todo: fix option typing
+                    map : insert(formatKey(hotel-id, date-iter),  value(cacheLookupResult) + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
                     memcache : memcache-id , mongodb : mongodb-id 
                 >
             )
@@ -279,7 +280,7 @@ mod RESERVATION-SERVER is
             ) ,
             (
                 branch(
-                    (cacheLookupResult < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
+                    (value(cacheLookupResult) < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
                     *** failure upon exceeding capacity
                     < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
                     *** passes capacity check for current date, jump back to loop head
@@ -502,7 +503,7 @@ mod RESERVATION-SERVER is
                     memcache : memcache-id , mongodb : mongodb-id 
                 >
             ),
-            reservationResponse(server-id, client-id, session-id, hotel-id) *** reservation success
+            reservationResponse(server-id, client-id, session-id, some(hotel-id))  *** reservation success
         ) .
 
     rl [handle-db-reservation-write-response] :

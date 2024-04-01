@@ -90,10 +90,12 @@ mod RESERVATION-TABLE is
 
 
     eq filterReservation(hotel_id, in_date, empty) = empty .
+
     ceq filterReservation(hotel_id, in_date, (reservation(hotel_id', customer_name, in_date', out_date, room_count), reservation_table))
         = filterReservation(hotel_id, in_date, reservation_table) if (hotel_id =/= hotel_id') or (in_date =/= in_date') .
+
     ceq filterReservation(hotel_id, in_date, (reservation(hotel_id', customer_name, in_date', out_date, room_count), reservation_table))
-        = reservation(hotel_id', customer_name, in_date', out_date, room_count) ,  filterReservation(hotel_id, in_date, reservation_table) 
+        = (reservation(hotel_id', customer_name, in_date', out_date, room_count) ,  filterReservation(hotel_id, in_date, reservation_table) )
         if (hotel_id == hotel_id') and (in_date == in_date') .
 
 
@@ -143,28 +145,56 @@ mod MONGODB is
 
     rl [query-reservation] : 
         reservationQueryRequest(server-id, mongodb-id, session-id, hotel-id, date)
-        < mongodb-id : MongDBServer | reservationTable : reservation-table >
+        < mongodb-id : MongDBServer | hotelTable : hotel-table, reservationTable : reservation-table >
         => 
         reservationQueryResponse(mongodb-id, server-id, session-id, filterReservation(hotel-id, date, reservation-table))
-        < mongodb-id : MongDBServer | reservationTable : reservation-table > .
+        < mongodb-id : MongDBServer | hotelTable : hotel-table, reservationTable : reservation-table > .
 
     rl [query-hotel] :
         hotelQueryRequest(server-id, mongodb-id, session-id, hotel-id)
-        < mongodb-id : MongDBServer | hotelTable : hotel-table >
+        < mongodb-id : MongDBServer | hotelTable : hotel-table , reservationTable : reservation-table >
         =>
         hotelQueryResponse(mongodb-id, server-id, session-id, getHotel(hotel-id, hotel-table))
-        < mongodb-id : MongDBServer | hotelTable : hotel-table > .
+        < mongodb-id : MongDBServer | hotelTable : hotel-table , reservationTable : reservation-table > .
 
     
     rl [insert-reservation] :
         insertReservationRequest(server-id, mongodb-id, session-id, reservation-0)
-        < mongodb-id : MongDBServer | reservationTable : reservation-table >
+        < mongodb-id : MongDBServer | reservationTable : reservation-table, hotelTable : hotel-table >
         =>
         insertReservationResponse(mongodb-id, server-id, session-id, true) *** todo: allow failure to happen
-        < mongodb-id : MongDBServer | reservationTable : (reservation-table, reservation-0) > .
+        < mongodb-id : MongDBServer | reservationTable : (reservation-table, reservation-0) , hotelTable : hotel-table > .
 
 
 
+endm
+
+
+mod MONGODB-TEST is 
+    protecting MONGODB .
+
+    ops mongotest0 mongotest1 mongotest2 mongotest3 : -> Configuration .
+
+    ops server-id mongodb-id mongodb-0  server-0 : -> Oid .
+
+    vars session-id hotel-id date : Nat .
+
+    eq mongotest0 = 
+        reservationQueryRequest(server-id, mongodb-id, 0, 0, 0)
+        < mongodb-id : MongDBServer | reservationTable : reservation(0, "John Doe", 0, 0, 10) > .
+
+    eq mongotest1 = 
+        < mongodb-0 : MongDBServer | hotelTable : hotel(0, 10), reservationTable : empty >
+        reservationQueryRequest(server-0, mongodb-0, 0, 0, 0) .
+ 
+
+    eq mongotest2 
+        = hotelQueryRequest(server-0, mongodb-0, 0, 0)
+        < mongodb-0 : MongDBServer | hotelTable : hotel(0, 10), reservationTable : empty > .
+
+    eq mongotest3 
+        = insertReservationRequest(server-0, mongodb-0, 0, reservation(0,"John Doe", 0, 1, 1))
+        < mongodb-0 : MongDBServer | hotelTable : hotel(0, 10), reservationTable : empty > .
 
 
 endm

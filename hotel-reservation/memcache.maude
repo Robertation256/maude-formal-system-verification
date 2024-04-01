@@ -27,8 +27,8 @@ mod MEMCACHE is
         < memcache-0 : MemcacheServer | datastore : datastore-0 >
         getRequest(client-0, memcache-0, sessionID-0, key-0)
         => if datastore-0[key-0] == undefined
-                then getResponse(memcache-0, client-0, sessionID-0, none)
-                else getResponse(memcache-0, client-0, sessionID-0, datastore-0[key-0])
+                then < memcache-0 : MemcacheServer | datastore : datastore-0 > getResponse(memcache-0, client-0, sessionID-0, none)
+                else < memcache-0 : MemcacheServer | datastore : datastore-0 > getResponse(memcache-0, client-0, sessionID-0, some(datastore-0[key-0]))
 
            fi .
 
@@ -37,6 +37,6 @@ mod MEMCACHE is
         setRequest(client-0, memcache-0, sessionID-0, key-0, value-0 )
         =>
         < memcache-0 : MemcacheServer | datastore : insert(key-0, value-0, datastore-0) >
-        setResponse(memcache-0, client-0, sessionID-0) .
+        setResponse(memcache-0, client-0, sessionID-0) .        *** todo: allow error?
 
 endm
