@@ -7,14 +7,15 @@ mod RESERVATION-SERVER is
     protecting MONGODB .
     protecting OPTION{Nat} .
     protecting MAP{String, Nat} .
-
     including CONFIGURATION .
 
     sorts State .
 
 
+
     *** server object definition
     op ReservationServer : -> Cid [ctor] . 
+    op threadCounter :_ : Nat -> Attribute [ctor] .
     op memcache :_ : Oid -> Attribute [ctor] . 
     op mongodb :_ : Oid -> Attribute [ctor] . 
 
@@ -55,12 +56,15 @@ mod RESERVATION-SERVER is
     op formatKey : Nat Nat -> String . 
     op branch : Bool Configuration Configuration -> Configuration .
 
+
+    op _/_ : Oid Nat -> Oid .
+
     
 
 
     vars client-id server-id memcache-id mongodb-id : Oid .
     var customer-name key : String .
-    vars session-id hotel-id in-date out-date room-count date-iter hotel-cap value : Nat .
+    vars thread-counter session-id hotel-id in-date out-date room-count date-iter hotel-cap value : Nat .
     var condition : Bool .
     var occupiedRoomMap : Map{String, Nat} .
     vars true-branch false-branch : Configuration .
@@ -83,11 +87,11 @@ mod RESERVATION-SERVER is
 
     *** return none if in_date >= out_date, or requests zero rooms
     rl [create-thread] :
-        < server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id >
+        < server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id, threadCounter : thread-counter >
         reservationRequest(client-id, server-id, session-id, customer-name, hotel-id, in-date, out-date, room-count)
         => 
-        < server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id >
-        < server-id : Thread | 
+        < server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id, threadCounter : s(thread-counter) >
+        < server-id / thread-counter : Thread | 
             state : checkLoop ,
             clientId : client-id ,
             customerName : customer-name ,
@@ -105,7 +109,7 @@ mod RESERVATION-SERVER is
 
     *** first check memcache for number of occupied rooms
     rl [capcity-lookup-loop] :
-        < server-id : Thread | 
+        < server-id / thread-counter : Thread | 
             state : checkLoop ,
             clientId : client-id ,
             customerName : customer-name ,
@@ -122,8 +126,8 @@ mod RESERVATION-SERVER is
         branch(
             (date-iter < out-date),
             (   
-                getRequest(server-id, memcache-id, session-id, formatKey(hotel-id, date-iter)) 
-                < server-id : Thread | 
+                getRequest(server-id / thread-counter, memcache-id, session-id, formatKey(hotel-id, date-iter)) 
+                < server-id / thread-counter : Thread | 
                     state : occupancyCacheReadWait ,
                     clientId : client-id ,
                     customerName : customer-name ,
@@ -138,7 +142,7 @@ mod RESERVATION-SERVER is
                 >
             ),
             (
-                < server-id : Thread |              
+                < server-id / thread-counter : Thread |              
                     state : cacheWriteLoop ,       *** done checking, now write new occupancy to cache
                     clientId : client-id ,
                     customerName : customer-name ,
@@ -158,8 +162,8 @@ mod RESERVATION-SERVER is
 
     *** cache hit looking for room occupancy
     rl [branch-on-occupancy-cache-result] : 
-        getResponse(memcache-id, server-id, session-id, cacheLookupResult)
-        < server-id : Thread | 
+        getResponse(memcache-id, server-id / thread-counter, session-id, cacheLookupResult)
+        < server-id / thread-counter : Thread | 
             state : occupancyCacheReadWait ,
             clientId : client-id ,
             customerName : customer-name ,
@@ -176,8 +180,8 @@ mod RESERVATION-SERVER is
         branch(
             (cacheLookupResult == none) ,
             (
-                reservationQueryRequest(server-id, mongodb-id, session-id, hotel-id, date-iter) ***todo: query DB for occupancy
-                < server-id : Thread | 
+                reservationQueryRequest(server-id / thread-counter, mongodb-id, session-id, hotel-id, date-iter) ***todo: query DB for occupancy
+                < server-id / thread-counter : Thread | 
                     state : occupancyDBWait ,       *** wait for DB response
                     clientId : client-id ,
                     customerName : customer-name ,
@@ -192,8 +196,8 @@ mod RESERVATION-SERVER is
                 >
             ) ,
             (
-                getRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap")
-                < server-id : Thread | 
+                getRequest(server-id / thread-counter, memcache-id, session-id, string(hotel-id, 10) + "_cap")
+                < server-id / thread-counter : Thread | 
                     state : capCacheReadWait ,       *** look up hotel capacity in cache
                     clientId : client-id ,
                     customerName : customer-name ,
@@ -212,8 +216,8 @@ mod RESERVATION-SERVER is
 
 
     rl [handle-db-occupancy-lookup-response] : 
-        reservationQueryResponse(mongodb-id, server-id, session-id, reservations)
-        < server-id : Thread | 
+        reservationQueryResponse(mongodb-id, server-id / thread-counter, session-id, reservations)
+        < server-id / thread-counter : Thread | 
             state : occupancyDBWait ,       *** wait for DB response
             clientId : client-id ,
             customerName : customer-name ,
@@ -227,8 +231,8 @@ mod RESERVATION-SERVER is
             memcache : memcache-id , mongodb : mongodb-id 
         >
         =>
-        getRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap")
-        < server-id : Thread | 
+        getRequest(server-id / thread-counter, memcache-id, session-id, string(hotel-id, 10) + "_cap")
+        < server-id / thread-counter : Thread | 
             state : capCacheReadWait ,       *** look up hotel capacity in cache
             clientId : client-id ,
             customerName : customer-name ,
@@ -244,8 +248,8 @@ mod RESERVATION-SERVER is
 
     
     rl [handle-cache-cap-lookup-response] : 
-        getResponse(memcache-id, server-id, session-id, cacheLookupResult)
-        < server-id : Thread | 
+        getResponse(memcache-id, server-id / thread-counter, session-id, cacheLookupResult)
+        < server-id / thread-counter : Thread | 
             state : capCacheReadWait ,     
             clientId : client-id ,
             customerName : customer-name ,
@@ -262,8 +266,8 @@ mod RESERVATION-SERVER is
         branch(
             (cacheLookupResult == none) ,   
             (
-                hotelQueryRequest(server-id, mongodb-id, session-id, hotel-id)  *** query DB on cache miss
-                < server-id : Thread | 
+                hotelQueryRequest(server-id / thread-counter, mongodb-id, session-id, hotel-id)  *** query DB on cache miss
+                < server-id / thread-counter : Thread | 
                     state : capDBWait ,        *** wait for DB response
                     clientId : client-id ,
                     customerName : customer-name ,
@@ -280,11 +284,11 @@ mod RESERVATION-SERVER is
             ) ,
             (
                 branch(
-                    (value(cacheLookupResult) < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
+                    (value(cacheLookupResult) < occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
                     *** failure upon exceeding capacity
-                    < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
+                    < server-id / thread-counter : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
                     *** passes capacity check for current date, jump back to loop head
-                    < server-id : Thread | 
+                    < server-id / thread-counter : Thread | 
                         state : checkLoop ,     
                         clientId : client-id ,
                         customerName : customer-name ,
@@ -302,7 +306,7 @@ mod RESERVATION-SERVER is
         ) .
 
     rl [handle-db-cap-lookup-response] :
-        < server-id : Thread | 
+        < server-id / thread-counter : Thread | 
             state : capDBWait ,        *** wait for DB response
             clientId : client-id ,
             customerName : customer-name ,
@@ -315,16 +319,16 @@ mod RESERVATION-SERVER is
             map : occupiedRoomMap ,  
             memcache : memcache-id , mongodb : mongodb-id 
         >
-        hotelQueryResponse(mongodb-id, server-id, session-id, hotels)
+        hotelQueryResponse(mongodb-id, server-id / thread-counter, session-id, hotels)
         =>
         branch(
             (hotels == empty) ,
             *** failed to find the corresponding hotel
-            < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
+            < server-id / thread-counter : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
             *** write back to cache
             (
-                setRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap", getHotelCap(hotels))
-                < server-id : Thread | 
+                setRequest(server-id / thread-counter, memcache-id, session-id, string(hotel-id, 10) + "_cap", getHotelCap(hotels))
+                < server-id / thread-counter : Thread | 
                     state : capCacheWriteWait ,        *** wait for cache write response
                     clientId : client-id ,
                     customerName : customer-name ,
@@ -342,8 +346,8 @@ mod RESERVATION-SERVER is
         ) .
 
     rl [handle-cap-cache-write-response] : 
-        setResponse(memcache-id, server-id, session-id)
-        < server-id : Thread | 
+        setResponse(memcache-id, server-id / thread-counter, session-id)
+        < server-id / thread-counter : Thread | 
             state : capCacheWriteWait ,        *** wait for cache write response
             clientId : client-id ,
             customerName : customer-name ,
@@ -361,8 +365,8 @@ mod RESERVATION-SERVER is
         branch(
             (hotel-cap < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
             *** failure due to exceeding capacity
-            < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
-            < server-id : Thread | 
+            < server-id / thread-counter : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
+            < server-id / thread-counter : Thread | 
                 state : checkLoop ,        *** jump back to loop head
                 clientId : client-id ,
                 customerName : customer-name ,
@@ -378,7 +382,7 @@ mod RESERVATION-SERVER is
         ) .
 
     rl [occupancy-cache-write-loop] : 
-        < server-id : Thread |              
+        < server-id / thread-counter : Thread |              
             state : cacheWriteLoop ,       
             clientId : client-id ,
             customerName : customer-name ,
@@ -392,8 +396,8 @@ mod RESERVATION-SERVER is
             memcache : memcache-id , mongodb : mongodb-id 
         >
         =>
-        setRequest(server-id, memcache-id, session-id, key, value )
-        < server-id : Thread |              
+        setRequest(server-id / thread-counter, memcache-id, session-id, key, value )
+        < server-id / thread-counter : Thread |              
             state : occupancyCacheWriteWait ,       
             clientId : client-id ,
             customerName : customer-name ,
@@ -410,7 +414,7 @@ mod RESERVATION-SERVER is
 
 
     rl [occupancy-cache-write-loop-break] : 
-        < server-id : Thread |              
+        < server-id / thread-counter : Thread |              
             state : cacheWriteLoop ,       
             clientId : client-id ,
             customerName : customer-name ,
@@ -424,7 +428,7 @@ mod RESERVATION-SERVER is
             memcache : memcache-id , mongodb : mongodb-id 
         >
         =>
-        < server-id : Thread |              
+        < server-id / thread-counter : Thread |              
             state : dbWriteLoop ,       *** jump to db reservation write loop
             clientId : client-id ,
             customerName : customer-name ,
@@ -440,8 +444,8 @@ mod RESERVATION-SERVER is
         
     
     rl [handle-cache-occupancy-write-response] : 
-        setResponse(memcache-id, server-id,  session-id)
-        < server-id : Thread |              
+        setResponse(memcache-id, server-id / thread-counter,  session-id)
+        < server-id / thread-counter : Thread |              
             state : occupancyCacheWriteWait ,       
             clientId : client-id ,
             customerName : customer-name ,
@@ -455,7 +459,7 @@ mod RESERVATION-SERVER is
             memcache : memcache-id , mongodb : mongodb-id 
         >
         =>
-        < server-id : Thread |              
+        < server-id / thread-counter : Thread |              
             state : cacheWriteLoop ,     *** jump back to cache write loop head
             clientId : client-id ,
             customerName : customer-name ,
@@ -471,7 +475,7 @@ mod RESERVATION-SERVER is
     
 
     rl [db-write-loop] :
-        < server-id : Thread |              
+        < server-id / thread-counter : Thread |              
             state : dbWriteLoop ,       
             clientId : client-id ,
             customerName : customer-name ,
@@ -488,8 +492,8 @@ mod RESERVATION-SERVER is
         branch(
             (date-iter < out-date) ,
             (
-                insertReservationRequest(server-id, mongodb-id, session-id, reservation(hotel-id, customer-name, date-iter, s(date-iter), room-count))
-                < server-id : Thread |              
+                insertReservationRequest(server-id / thread-counter, mongodb-id, session-id, reservation(hotel-id, customer-name, date-iter, s(date-iter), room-count))
+                < server-id / thread-counter : Thread |              
                     state : dbReservationWriteWait ,       
                     clientId : client-id ,
                     customerName : customer-name ,
@@ -507,8 +511,8 @@ mod RESERVATION-SERVER is
         ) .
 
     rl [handle-db-reservation-write-response] :
-        insertReservationResponse(mongodb-id, server-id, session-id, isWriteSuccess)
-        < server-id : Thread |              
+        insertReservationResponse(mongodb-id, server-id / thread-counter, session-id, isWriteSuccess)
+        < server-id / thread-counter : Thread |              
             state : dbReservationWriteWait ,       
             clientId : client-id ,
             customerName : customer-name ,
@@ -524,7 +528,7 @@ mod RESERVATION-SERVER is
         => 
         branch (
             isWriteSuccess ,
-            < server-id : Thread |              
+            < server-id / thread-counter : Thread |              
                 state : dbWriteLoop ,           *** jump back to loop head
                 clientId : client-id ,
                 customerName : customer-name ,
@@ -538,13 +542,13 @@ mod RESERVATION-SERVER is
                 memcache : memcache-id , mongodb : mongodb-id 
             >,
             *** otherwise the whole operation fails
-            < server-id : Thread | state : reservationFailed, clientId : client-id , sessionId : session-id > 
+            < server-id / thread-counter : Thread | state : reservationFailed, clientId : client-id , sessionId : session-id > 
         ) .
 
 
     *** todo : add error message    
     rl [reservation-failure] :  
-        < server-id : Thread | state : reservationFailed, clientId : client-id , sessionId : session-id > 
+        < server-id / thread-counter : Thread | state : reservationFailed, clientId : client-id , sessionId : session-id > 
         =>
         reservationResponse(server-id, client-id, session-id, none) .
 

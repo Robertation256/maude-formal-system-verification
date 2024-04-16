@@ -1,28 +1,63 @@
 mod SERVER-TEST is
     protecting RESERVATION-SERVER .
+    protecting ERROR .
 
 
 
-    ops test0 test1 : -> Configuration .
+    ops test0 test1 test2 test3 : -> Configuration .
 
 
-    ops client-0 server-0 memcache-0 mongodb-0 : -> Oid .
+    ops client-0 client-1 server-0 memcache-0 mongodb-0 : -> Oid .
+
+
+    vars C : Configuration .
+    vars server-id client-id : Oid .
+    vars thread-id session-id : Nat .  
+
 
     
-    *** a trvial request
+
+    
+    *** a trvial request reserving no rooms
     eq test0 = 
         reservationRequest(client-0, server-0, 0, "John Doe", 0, 0, 0, 0)
-        < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0 >
+        < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : 0 >
         < memcache-0 : MemcacheServer | datastore : empty >
         < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : empty > .
 
 
-    *** a valid request
+    *** one valid request 
     eq test1 = 
-        reservationRequest(client-0, server-0, 0, "John Doe", 0, 0, 1, 1)
-        < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0 >
+        reservationRequest(client-0, server-0, 0, "John Doe", 0, 0, 1, 10)
+        < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : 0 >
         < memcache-0 : MemcacheServer | datastore : empty >
         < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : (hotel(0, 10), empty) > .
+
+
+    *** multiple valid request 
+    *** the non-atomic inc on memcache is causing inconsistency under concurrency
+    eq test2 = 
+        reservationRequest(client-0, server-0, 0, "client0", 0, 0, 1, 5)
+        reservationRequest(client-1, server-0, 0, "client1", 0, 0, 1, 5)
+        < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : 0 >
+        < memcache-0 : MemcacheServer | datastore : empty >
+        < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : (hotel(0, 10), empty) > .
+
+
+
+
+
+    --- eq test3 = 
+    ---     error 
+    ---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : 0 > .
+
+
+
+
+
+
+    *** when the system is complicated, hard to tell whether if the model is wrong or the system is faulty 
+    *** since  the search graph might be very hard to analyze
 
 
 
