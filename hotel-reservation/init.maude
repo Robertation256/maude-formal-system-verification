@@ -14,3 +14,6 @@ load server-test .
 --- search [ 10, 40 ] in SERVER-TEST : test1 =>! C .
 
 search  in SERVER-TEST : test2 =>+  < server-id / thread-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id >   C .
+
+
+search  in SERVER-TEST : test3 =>! C .

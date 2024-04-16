@@ -26,7 +26,7 @@ mod SERVER-TEST is
         < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : empty > .
 
 
-    *** one valid request 
+    *** one valid request, should never fail when there is no crash
     eq test1 = 
         reservationRequest(client-0, server-0, 0, "John Doe", 0, 0, 1, 10)
         < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : 0 >
@@ -35,16 +35,35 @@ mod SERVER-TEST is
 
 
     *** multiple valid request 
-    *** the non-atomic inc on memcache is causing inconsistency under concurrency
+    *** there should not be failed requests when there is no crash
     eq test2 = 
         reservationRequest(client-0, server-0, 0, "client0", 0, 0, 1, 5)
-        reservationRequest(client-1, server-0, 0, "client1", 0, 0, 1, 5)
+        reservationRequest(client-1, server-0, 0, "client1", 0, 0, 2, 5)
+        < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : 0 >
+        < memcache-0 : MemcacheServer | datastore : empty >
+        < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : (hotel(0, 10), empty) > .
+
+
+    
+    *** multiple request exceeding hotel capacity
+    *** verify that it is possible for all to go through, causing inconsistency
+    eq test3 = 
+        reservationRequest(client-0, server-0, 0, "client0", 0, 0, 1, 5)
+        reservationRequest(client-1, server-0, 0, "client1", 0, 0, 2, 7)
         < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : 0 >
         < memcache-0 : MemcacheServer | datastore : empty >
         < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : (hotel(0, 10), empty) > .
 
 
 
+    *** check for violation of the invariant sum(reserved_rooms) == cache[room]
+
+
+
+    *** check for violation of the invariant sum(reserved_rooms) == DB[room]
+
+
+    *** check for violation of the db[room] == cache[room]
 
 
     --- eq test3 = 
