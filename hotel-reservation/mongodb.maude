@@ -8,59 +8,194 @@ mod HOTEL-TABLE is
     protecting OPTION{Nat} .
 
 
-    sort HotelEntry HotelTable .
-    subsort  HotelEntry  < HotelTable .
+    sort Hotel Hotels .
+    subsort  Hotel  < Hotels .
 
-    op emptyHotelTable : -> HotelTable [ctor].
-    op hotelEntry : Nat Nat -> HotelEntry [ctor].
+    op empty : -> Hotels [ctor].
+    op hotel : Nat Nat -> Hotel [ctor].
 
     *** communtative since mongodb return results in arbitrary order
-    op _,_ : HotelTable HotelTable -> HotelTable    [ctor comm assoc id: emptyHotelTable] .
+    op _,_ : Hotels Hotels -> Hotels    [ctor comm assoc id: empty] .
 
 
-    op getHotelId : HotelEntry -> Nat .
-    op getHotelCap : HotelEntry -> Nat .
+    op getHotelId : Hotel -> Nat .
+    op getHotelCap : Hotels -> Nat .
+
     
-    op insertHotel : Nat Nat HotelTable -> HotelTable .
-    op getHotelCapacityById : Nat HotelTable -> Option{Nat} .
+    op insertHotel : Nat Nat Hotels -> Hotels .
+    op getHotel : Nat Hotels -> Hotels .    *** get a hotel by id
 
     *** todo: support lookup by multiple ids
 
     vars hotel_id hotel_id' hotel_cap : Nat .
-    var hotel_table : HotelTable .
+    var hotel_table : Hotels .
 
 
-    eq getHotelId(hotelEntry(hotel_id, hotel_cap))
-        = hotel_id .
+    *** find one hotel that match the hotel_id
+    eq getHotel(hotel_id, empty) = empty .
+    ceq getHotel(hotel_id, (hotel(hotel_id', hotel_cap), hotel_table)) 
+        = hotel(hotel_id', hotel_cap) if hotel_id == hotel_id' .
+    
+    ceq getHotel(hotel_id, (hotel(hotel_id', hotel_cap), hotel_table)) 
+        = getHotel(hotel_id, hotel_table) if hotel_id =/= hotel_id' .
 
-    eq getHotelCap(hotelEntry(hotel_id, hotel_cap))
-        = hotel_cap .
+    *** return cap projection from a non-emtpy multiset
+    eq getHotelCap((hotel(hotel_id, hotel_cap), hotel_table)) = hotel_cap .
+
 
     eq insertHotel(hotel_id, hotel_cap, hotel_table) 
-        = (hotel_table , hotelEntry(hotel_id, hotel_cap)) .
+        = (hotel_table , hotel(hotel_id, hotel_cap)) .
 
 
-    
-    eq getHotelCapacityById(hotel_id, emptyHotelTable) = none .
 
-    
-    eq getHotelCapacityById(hotel_id, (hotelEntry(hotel_id', hotel_cap), hotel_table))
-        = if hotel_id == hotel_id' then hotel_cap
-          else getHotelCapacityById(hotel_id, hotel_table) fi .
 endm
-
 
 
 mod HOTEL-TABLE-TEST is 
     protecting HOTEL-TABLE .
 
-    op testTable : -> HotelTable .
+    op testTable : -> Hotels .
 
     eq testTable = insertHotel(1, 100, 
         insertHotel(2, 200, 
-            insertHotel(3, 300, emptyHotelTable)
+            insertHotel(3, 300, empty)
         )
     ) .
+
+endm
+
+
+mod RESERVATION-TABLE is 
+    protecting NAT .
+    protecting STRING . 
+
+
+    sort Reservation Reservations .
+    subsort  Reservation  < Reservations .
+
+    op empty : -> Reservations [ctor].
+    op reservation : Nat String Nat Nat Nat -> Reservation [ctor]. *** hotel_id, customer_name, in_date, out_date, room_count
+
+    *** communtative since mongodb return results in arbitrary order
+    op _,_ : Reservations Reservations -> Reservations    [ctor comm assoc id: empty] .
+
+
+
+    op filterReservation : Nat Nat Reservations -> Reservations . *** filter by hotel_id and date
+    op countTotalOccupancy : Reservations -> Nat .   *** sum all room count  
+
+    vars hotel_id hotel_id' in_date in_date' out_date room_count : Nat .
+    var customer_name : String .
+    var reservation_table : Reservations .
+
+
+    eq filterReservation(hotel_id, in_date, empty) = empty .
+
+    ceq filterReservation(hotel_id, in_date, (reservation(hotel_id', customer_name, in_date', out_date, room_count), reservation_table))
+        = filterReservation(hotel_id, in_date, reservation_table) if (hotel_id =/= hotel_id') or (in_date =/= in_date') .
+
+    ceq filterReservation(hotel_id, in_date, (reservation(hotel_id', customer_name, in_date', out_date, room_count), reservation_table))
+        = (reservation(hotel_id', customer_name, in_date', out_date, room_count) ,  filterReservation(hotel_id, in_date, reservation_table) )
+        if (hotel_id == hotel_id') and (in_date == in_date') .
+
+
+    eq countTotalOccupancy(empty) = 0 .
+    eq countTotalOccupancy((reservation(hotel_id, customer_name, in_date, out_date, room_count), reservation_table))
+        = room_count + countTotalOccupancy(reservation_table) .
+
+
+endm 
+
+
+mod MONGODB is 
+    protecting NAT .
+    protecting STRING .
+    protecting HOTEL-TABLE .
+    protecting RESERVATION-TABLE .
+    including CONFIGURATION .
+
+
+
+    *** class definition
+    op MongDBServer : -> Cid [ctor] . 
+    op hotelTable :_ : Hotels -> Attribute [ctor] . 
+    op reservationTable :_ : Reservations -> Attribute [ctor] .
+
+
+
+    *** messages
+    *** select reservations by hotel-id and date
+    op reservationQueryRequest : Oid Oid Nat Nat Nat -> Msg [ctor] . *** server-id, mongodb-id, session-id, hotel-id, date
+    op reservationQueryResponse : Oid Oid Nat Reservations -> Msg [ctor] . *** mongodb-id, server-id session-id, reservations
+
+
+    op hotelQueryRequest : Oid Oid Nat Nat -> Msg [ctor] . *** server-id, mongo-db-id, session-id, hotel-id
+    op hotelQueryResponse : Oid Oid Nat Hotels -> Msg [ctor] . *** mongodb-id, server-id session-id, hotels
+
+    op insertReservationRequest : Oid Oid Nat Reservation -> Msg [ctor] . *** server-id, mongo-db-id, session-id, reservation
+    op insertReservationResponse : Oid Oid Nat Bool -> Msg [ctor] . *** mongodb-id, server-id, session-id, is-sucessful
+
+    vars server-id mongodb-id : Oid .
+    vars session-id hotel-id date : Nat .
+    var reservation-table : Reservations .
+    var reservation-0 : Reservation .
+    var hotel-table : Hotels .
+
+
+
+    rl [query-reservation] : 
+        reservationQueryRequest(server-id, mongodb-id, session-id, hotel-id, date)
+        < mongodb-id : MongDBServer | hotelTable : hotel-table, reservationTable : reservation-table >
+        => 
+        reservationQueryResponse(mongodb-id, server-id, session-id, filterReservation(hotel-id, date, reservation-table))
+        < mongodb-id : MongDBServer | hotelTable : hotel-table, reservationTable : reservation-table > .
+
+    rl [query-hotel] :
+        hotelQueryRequest(server-id, mongodb-id, session-id, hotel-id)
+        < mongodb-id : MongDBServer | hotelTable : hotel-table , reservationTable : reservation-table >
+        =>
+        hotelQueryResponse(mongodb-id, server-id, session-id, getHotel(hotel-id, hotel-table))
+        < mongodb-id : MongDBServer | hotelTable : hotel-table , reservationTable : reservation-table > .
+
+    
+    rl [insert-reservation] :
+        insertReservationRequest(server-id, mongodb-id, session-id, reservation-0)
+        < mongodb-id : MongDBServer | reservationTable : reservation-table, hotelTable : hotel-table >
+        =>
+        insertReservationResponse(mongodb-id, server-id, session-id, true) *** todo: allow failure to happen
+        < mongodb-id : MongDBServer | reservationTable : (reservation-table, reservation-0) , hotelTable : hotel-table > .
+
+
+
+endm
+
+
+mod MONGODB-TEST is 
+    protecting MONGODB .
+
+    ops mongotest0 mongotest1 mongotest2 mongotest3 : -> Configuration .
+
+    ops server-id mongodb-id mongodb-0  server-0 : -> Oid .
+
+    vars session-id hotel-id date : Nat .
+
+    eq mongotest0 = 
+        reservationQueryRequest(server-id, mongodb-id, 0, 0, 0)
+        < mongodb-id : MongDBServer | reservationTable : reservation(0, "John Doe", 0, 0, 10) > .
+
+    eq mongotest1 = 
+        < mongodb-0 : MongDBServer | hotelTable : hotel(0, 10), reservationTable : empty >
+        reservationQueryRequest(server-0, mongodb-0, 0, 0, 0) .
+ 
+
+    eq mongotest2 
+        = hotelQueryRequest(server-0, mongodb-0, 0, 0)
+        < mongodb-0 : MongDBServer | hotelTable : hotel(0, 10), reservationTable : empty > .
+
+    eq mongotest3 
+        = insertReservationRequest(server-0, mongodb-0, 0, reservation(0,"John Doe", 0, 1, 1))
+        < mongodb-0 : MongDBServer | hotelTable : hotel(0, 10), reservationTable : empty > .
+
 
 endm
 

@@ -1,34 +1,34 @@
 mod MEMCACHE is 
     protecting NAT .
     protecting STRING .
-    protecting MAP{String, String} .
-    protecting OPTION{String} .
+    protecting MAP{String, Nat} .
+    protecting OPTION{Nat} .
     including CONFIGURATION .
 
     *** class definition
     op MemcacheServer : -> Cid [ctor] . 
-    op datastore :_ : Map{String, String} -> Attribute [ctor] . 
+    op datastore :_ : Map{String, Nat} -> Attribute [ctor] . 
 
     
 
     *** messages
     op getRequest : Oid Oid Nat String -> Msg [ctor] .  *** senderID, receiverID, sessionID, key
-    op getResponse : Oid Oid Nat Option{String} -> Msg [ctor] . *** senderID, receiverID, sessionID, value
-    op setRequest : Oid Oid Nat String String -> Msg [ctor] . *** senderID, receiverID, sessionID, key, value
+    op getResponse : Oid Oid Nat Option{Nat} -> Msg [ctor] . *** senderID, receiverID, sessionID, value
+    op setRequest : Oid Oid Nat String Nat -> Msg [ctor] . *** senderID, receiverID, sessionID, key, value
     op setResponse : Oid Oid Nat -> Msg [ctor] . *** senderID, receiverID, sessionID
 
     vars client-0 memcache-0 : Oid .
-    var datastore-0 : Map{String, String} .
-    var sessionID-0 : Nat .
-    vars key-0 value-0 : String .
+    var datastore-0 : Map{String, Nat} .
+    vars sessionID-0 value-0 : Nat .
+    var key-0 : String .
 
 
     rl [handle-get] : 
         < memcache-0 : MemcacheServer | datastore : datastore-0 >
         getRequest(client-0, memcache-0, sessionID-0, key-0)
         => if datastore-0[key-0] == undefined
-                then getResponse(memcache-0, client-0, sessionID-0, none)
-                else getResponse(memcache-0, client-0, sessionID-0, datastore-0[key-0])
+                then < memcache-0 : MemcacheServer | datastore : datastore-0 > getResponse(memcache-0, client-0, sessionID-0, none)
+                else < memcache-0 : MemcacheServer | datastore : datastore-0 > getResponse(memcache-0, client-0, sessionID-0, some(datastore-0[key-0]))
 
            fi .
 
@@ -37,6 +37,6 @@ mod MEMCACHE is
         setRequest(client-0, memcache-0, sessionID-0, key-0, value-0 )
         =>
         < memcache-0 : MemcacheServer | datastore : insert(key-0, value-0, datastore-0) >
-        setResponse(memcache-0, client-0, sessionID-0) .
+        setResponse(memcache-0, client-0, sessionID-0) .        *** todo: allow error?
 
 endm

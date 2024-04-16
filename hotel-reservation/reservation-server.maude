@@ -1,0 +1,573 @@
+
+mod RESERVATION-SERVER is
+
+    protecting NAT .
+    protecting CONVERSION . 
+    protecting MEMCACHE .
+    protecting MONGODB .
+    protecting OPTION{Nat} .
+    protecting MAP{String, Nat} .
+
+    including CONFIGURATION .
+
+    sorts State .
+
+
+    *** server object definition
+    op ReservationServer : -> Cid [ctor] . 
+    op memcache :_ : Oid -> Attribute [ctor] . 
+    op mongodb :_ : Oid -> Attribute [ctor] . 
+
+    *** thread object definition
+    op Thread : -> Cid [ctor] .
+    op state :_ : State -> Attribute [ctor] .
+    op clientId :_ : Oid -> Attribute [ctor] .
+    op customerName :_ : String -> Attribute [ctor] .
+    op sessionId :_ : Nat -> Attribute [ctor] .
+    op hotelId :_ : Nat -> Attribute [ctor] .
+    op inDate :_ : Nat -> Attribute [ctor] .
+    op outDate :_ : Nat -> Attribute [ctor] .
+    op dateIter :_ : Nat -> Attribute [ctor] .
+    op roomCount :_ : Nat -> Attribute [ctor] .
+    op map :_ : Map{String, Nat} -> Attribute [ctor] .
+    op hotelCap :_ : Nat -> Attribute [ctor] .        *** tmp var 
+    op mapIter :_ : Map{String, Nat} -> Attribute [ctor] . *** tmp var
+
+    
+
+    *** messages
+    op reservationRequest : Oid Oid Nat String Nat Nat Nat Nat -> Msg [ctor] .  *** sender_id, receiver_id, session_id,  customer_name, hotel_id, in_date, out_date, room_count
+    op reservationResponse : Oid Oid Nat Option{Nat} -> Msg [ctor] . *** sender_id, receiver_id, session_id, hotel_id (none if reservation failed)
+
+
+
+
+
+    *** instruction labels
+    ops checkLoop occupancyCacheReadWait occupancyCacheWriteWait occupancyDBWait
+        capCacheReadWait capCacheWriteWait capDBWait 
+        cacheWriteLoop dbWriteLoop dbReservationWriteWait
+        reservationFailed : -> State .
+
+
+
+    *** utility functions
+    op formatKey : Nat Nat -> String . 
+    op branch : Bool Configuration Configuration -> Configuration .
+
+    
+
+
+    vars client-id server-id memcache-id mongodb-id : Oid .
+    var customer-name key : String .
+    vars session-id hotel-id in-date out-date room-count date-iter hotel-cap value : Nat .
+    var condition : Bool .
+    var occupiedRoomMap : Map{String, Nat} .
+    vars true-branch false-branch : Configuration .
+    var cacheLookupResult : Option{Nat} .
+    var reservations : Reservations .
+    var hotels : Hotels .
+    var isWriteSuccess : Bool .
+    var map-iter : Map{String, Nat} .
+
+
+    eq formatKey(hotel-id, in-date) = string(hotel-id, 10) + "_" + string(in-date, 10) .
+
+    eq branch(true, true-branch, false-branch) = true-branch .
+    eq branch(false, true-branch, false-branch) = false-branch .
+
+
+
+
+
+
+    *** return none if in_date >= out_date, or requests zero rooms
+    rl [create-thread] :
+        < server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id >
+        reservationRequest(client-id, server-id, session-id, customer-name, hotel-id, in-date, out-date, room-count)
+        => 
+        < server-id : ReservationServer | memcache : memcache-id , mongodb : mongodb-id >
+        < server-id : Thread | 
+            state : checkLoop ,
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : in-date ,            *** setup iterator
+            roomCount : room-count ,
+            map : empty,
+            memcache : memcache-id , mongodb : mongodb-id 
+        > .
+
+
+
+    *** first check memcache for number of occupied rooms
+    rl [capcity-lookup-loop] :
+        < server-id : Thread | 
+            state : checkLoop ,
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        branch(
+            (date-iter < out-date),
+            (   
+                getRequest(server-id, memcache-id, session-id, formatKey(hotel-id, date-iter)) 
+                < server-id : Thread | 
+                    state : occupancyCacheReadWait ,
+                    clientId : client-id ,
+                    customerName : customer-name ,
+                    sessionId : session-id ,
+                    hotelId : hotel-id ,
+                    inDate : in-date ,
+                    outDate : out-date ,
+                    dateIter : date-iter ,
+                    roomCount : room-count ,
+                    map : occupiedRoomMap ,
+                    memcache : memcache-id , mongodb : mongodb-id 
+                >
+            ),
+            (
+                < server-id : Thread |              
+                    state : cacheWriteLoop ,       *** done checking, now write new occupancy to cache
+                    clientId : client-id ,
+                    customerName : customer-name ,
+                    sessionId : session-id ,
+                    hotelId : hotel-id ,
+                    inDate : in-date ,
+                    outDate : out-date ,
+                    roomCount : room-count ,
+                    map : occupiedRoomMap ,
+                    mapIter : occupiedRoomMap ,
+                    memcache : memcache-id , mongodb : mongodb-id 
+                >
+
+            )
+        ) .
+
+
+    *** cache hit looking for room occupancy
+    rl [branch-on-occupancy-cache-result] : 
+        getResponse(memcache-id, server-id, session-id, cacheLookupResult)
+        < server-id : Thread | 
+            state : occupancyCacheReadWait ,
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        branch(
+            (cacheLookupResult == none) ,
+            (
+                reservationQueryRequest(server-id, mongodb-id, session-id, hotel-id, date-iter) ***todo: query DB for occupancy
+                < server-id : Thread | 
+                    state : occupancyDBWait ,       *** wait for DB response
+                    clientId : client-id ,
+                    customerName : customer-name ,
+                    sessionId : session-id ,
+                    hotelId : hotel-id ,
+                    inDate : in-date ,
+                    outDate : out-date ,
+                    dateIter : date-iter ,
+                    roomCount : room-count ,
+                    map : occupiedRoomMap ,
+                    memcache : memcache-id , mongodb : mongodb-id 
+                >
+            ) ,
+            (
+                getRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap")
+                < server-id : Thread | 
+                    state : capCacheReadWait ,       *** look up hotel capacity in cache
+                    clientId : client-id ,
+                    customerName : customer-name ,
+                    sessionId : session-id ,
+                    hotelId : hotel-id ,
+                    inDate : in-date ,
+                    outDate : out-date ,
+                    dateIter : date-iter ,       
+                    roomCount : room-count ,
+                    *** todo: fix option typing
+                    map : insert(formatKey(hotel-id, date-iter),  value(cacheLookupResult) + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
+                    memcache : memcache-id , mongodb : mongodb-id 
+                >
+            )
+        ) .
+
+
+    rl [handle-db-occupancy-lookup-response] : 
+        reservationQueryResponse(mongodb-id, server-id, session-id, reservations)
+        < server-id : Thread | 
+            state : occupancyDBWait ,       *** wait for DB response
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        getRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap")
+        < server-id : Thread | 
+            state : capCacheReadWait ,       *** look up hotel capacity in cache
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,       
+            roomCount : room-count ,
+            map : insert(formatKey(hotel-id, date-iter),  countTotalOccupancy(reservations) + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
+            memcache : memcache-id , mongodb : mongodb-id 
+        > .
+
+    
+    rl [handle-cache-cap-lookup-response] : 
+        getResponse(memcache-id, server-id, session-id, cacheLookupResult)
+        < server-id : Thread | 
+            state : capCacheReadWait ,     
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,       
+            roomCount : room-count ,
+            map : occupiedRoomMap ,  
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        branch(
+            (cacheLookupResult == none) ,   
+            (
+                hotelQueryRequest(server-id, mongodb-id, session-id, hotel-id)  *** query DB on cache miss
+                < server-id : Thread | 
+                    state : capDBWait ,        *** wait for DB response
+                    clientId : client-id ,
+                    customerName : customer-name ,
+                    sessionId : session-id ,
+                    hotelId : hotel-id ,
+                    inDate : in-date ,
+                    outDate : out-date ,
+                    dateIter : date-iter ,       
+                    roomCount : room-count ,
+                    map : occupiedRoomMap ,  
+                    memcache : memcache-id , mongodb : mongodb-id 
+                >
+
+            ) ,
+            (
+                branch(
+                    (value(cacheLookupResult) < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
+                    *** failure upon exceeding capacity
+                    < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
+                    *** passes capacity check for current date, jump back to loop head
+                    < server-id : Thread | 
+                        state : checkLoop ,     
+                        clientId : client-id ,
+                        customerName : customer-name ,
+                        sessionId : session-id ,
+                        hotelId : hotel-id ,
+                        inDate : in-date ,
+                        outDate : out-date ,
+                        dateIter : s(date-iter) ,       *** increment iterator       
+                        roomCount : room-count ,
+                        map : occupiedRoomMap ,  
+                        memcache : memcache-id , mongodb : mongodb-id 
+                    >
+                )
+            )
+        ) .
+
+    rl [handle-db-cap-lookup-response] :
+        < server-id : Thread | 
+            state : capDBWait ,        *** wait for DB response
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,       
+            roomCount : room-count ,
+            map : occupiedRoomMap ,  
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        hotelQueryResponse(mongodb-id, server-id, session-id, hotels)
+        =>
+        branch(
+            (hotels == empty) ,
+            *** failed to find the corresponding hotel
+            < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
+            *** write back to cache
+            (
+                setRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap", getHotelCap(hotels))
+                < server-id : Thread | 
+                    state : capCacheWriteWait ,        *** wait for cache write response
+                    clientId : client-id ,
+                    customerName : customer-name ,
+                    sessionId : session-id ,
+                    hotelId : hotel-id ,
+                    inDate : in-date ,
+                    outDate : out-date ,
+                    dateIter : date-iter ,       
+                    roomCount : room-count ,
+                    map : occupiedRoomMap ,  
+                    memcache : memcache-id , mongodb : mongodb-id,
+                    hotelCap : getHotelCap(hotels)
+                >
+            )
+        ) .
+
+    rl [handle-cap-cache-write-response] : 
+        setResponse(memcache-id, server-id, session-id)
+        < server-id : Thread | 
+            state : capCacheWriteWait ,        *** wait for cache write response
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,       
+            roomCount : room-count ,
+            map : occupiedRoomMap ,  
+            memcache : memcache-id , mongodb : mongodb-id,
+            hotelCap : hotel-cap
+        >
+        =>
+        branch(
+            (hotel-cap < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
+            *** failure due to exceeding capacity
+            < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
+            < server-id : Thread | 
+                state : checkLoop ,        *** jump back to loop head
+                clientId : client-id ,
+                customerName : customer-name ,
+                sessionId : session-id ,
+                hotelId : hotel-id ,
+                inDate : in-date ,
+                outDate : out-date ,
+                dateIter : s(date-iter) ,   *** increment iterator       
+                roomCount : room-count ,
+                map : occupiedRoomMap ,  
+                memcache : memcache-id , mongodb : mongodb-id
+            >
+        ) .
+
+    rl [occupancy-cache-write-loop] : 
+        < server-id : Thread |              
+            state : cacheWriteLoop ,       
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,      
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            mapIter : (map-iter, key |-> value) ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        setRequest(server-id, memcache-id, session-id, key, value )
+        < server-id : Thread |              
+            state : occupancyCacheWriteWait ,       
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,       
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            mapIter : map-iter,
+            memcache : memcache-id , mongodb : mongodb-id 
+        > .
+        
+
+
+    rl [occupancy-cache-write-loop-break] : 
+        < server-id : Thread |              
+            state : cacheWriteLoop ,       
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,         
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            mapIter : empty ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        < server-id : Thread |              
+            state : dbWriteLoop ,       *** jump to db reservation write loop
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : in-date ,        *** reset iterator          
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        > .
+        
+    
+    rl [handle-cache-occupancy-write-response] : 
+        setResponse(memcache-id, server-id,  session-id)
+        < server-id : Thread |              
+            state : occupancyCacheWriteWait ,       
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,      
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            mapIter : map-iter ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        < server-id : Thread |              
+            state : cacheWriteLoop ,     *** jump back to cache write loop head
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            mapIter : map-iter ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        > .
+    
+
+    rl [db-write-loop] :
+        < server-id : Thread |              
+            state : dbWriteLoop ,       
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,               
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        =>
+        branch(
+            (date-iter < out-date) ,
+            (
+                insertReservationRequest(server-id, mongodb-id, session-id, reservation(hotel-id, customer-name, date-iter, s(date-iter), room-count))
+                < server-id : Thread |              
+                    state : dbReservationWriteWait ,       
+                    clientId : client-id ,
+                    customerName : customer-name ,
+                    sessionId : session-id ,
+                    hotelId : hotel-id ,
+                    inDate : in-date ,
+                    outDate : out-date ,
+                    dateIter : date-iter ,               
+                    roomCount : room-count ,
+                    map : occupiedRoomMap ,
+                    memcache : memcache-id , mongodb : mongodb-id 
+                >
+            ),
+            reservationResponse(server-id, client-id, session-id, some(hotel-id))  *** reservation success
+        ) .
+
+    rl [handle-db-reservation-write-response] :
+        insertReservationResponse(mongodb-id, server-id, session-id, isWriteSuccess)
+        < server-id : Thread |              
+            state : dbReservationWriteWait ,       
+            clientId : client-id ,
+            customerName : customer-name ,
+            sessionId : session-id ,
+            hotelId : hotel-id ,
+            inDate : in-date ,
+            outDate : out-date ,
+            dateIter : date-iter ,               
+            roomCount : room-count ,
+            map : occupiedRoomMap ,
+            memcache : memcache-id , mongodb : mongodb-id 
+        >
+        => 
+        branch (
+            isWriteSuccess ,
+            < server-id : Thread |              
+                state : dbWriteLoop ,           *** jump back to loop head
+                clientId : client-id ,
+                customerName : customer-name ,
+                sessionId : session-id ,
+                hotelId : hotel-id ,
+                inDate : in-date ,
+                outDate : out-date ,
+                dateIter : s(date-iter) ,      *** inc iterator
+                roomCount : room-count ,
+                map : occupiedRoomMap ,
+                memcache : memcache-id , mongodb : mongodb-id 
+            >,
+            *** otherwise the whole operation fails
+            < server-id : Thread | state : reservationFailed, clientId : client-id , sessionId : session-id > 
+        ) .
+
+
+    *** todo : add error message    
+    rl [reservation-failure] :  
+        < server-id : Thread | state : reservationFailed, clientId : client-id , sessionId : session-id > 
+        =>
+        reservationResponse(server-id, client-id, session-id, none) .
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+    
+
+
+endm
