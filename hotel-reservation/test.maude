@@ -81,8 +81,8 @@ search in TEST :
 *** due to the lack of memcache atomic incrementation
 *** cache can become inconsistent with the database
 search in TEST : 
-    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 1, 5)
-    reservationRequest(client-0, server-0, 1, customer-name, 0, 0, 1, 5)
+    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 5, 5)
+    reservationRequest(client-0, server-0, 1, customer-name, 0, 0, 5, 5)
     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
     < memcache-0 : MemcacheServer | datastore : empty >
     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
@@ -93,9 +93,12 @@ search in TEST :
 *** lessons learned:
 *** 1. either provide a semantics+memory model for modelling generic code snippets or model it as a FSM that encodes control flow information.
 *** 2. avoid over-simulations that can stall symbolic evaluation (ie, encoding hotel-id and date into string as cache key)
+*** 3. verifying the correctness of a model can be hard, especially when it comes to debugging based on search graph.
 
 
 
-
-
+*** other challenges
+*** 1. some notions of time (ie timeout) is discarded for simplicity 
+*** 2. certain implementation in the code can easily stall symbolic execution (arithmetics/comparison/etc)
+*** 3. search time increase significantly once we increase the input (ie increase the range of date from 1 to 10)
 
