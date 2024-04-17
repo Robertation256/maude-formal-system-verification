@@ -33,12 +33,20 @@ mod TEST is
 endm
 
 
-
 search in TEST : 
-    reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, in-date, s(in-date), room-count)
+    reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, 0, 1, room-count)
     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
     < memcache-0 : MemcacheServer | datastore : empty >
     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : empty >
+    =>! C .
+
+
+
+search in TEST : 
+    reservationRequest(client-0, server-0, session-id, customer-name, 0, 0, 1, 10)
+    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+    < memcache-0 : MemcacheServer | datastore : empty >
+    < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
     =>! C .
 
 

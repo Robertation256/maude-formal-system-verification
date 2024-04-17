@@ -361,7 +361,7 @@ mod RESERVATION-SERVER is
         >
         =>
         branch(
-            (hotel-cap < room-count + value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
+            (hotel-cap < value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
             *** failure due to exceeding capacity
             < server-id / thread-counter : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
             < server-id / thread-counter : Thread | 
