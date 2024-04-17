@@ -2,11 +2,10 @@
 mod RESERVATION-SERVER is
 
     protecting NAT .
-    protecting CONVERSION . 
     protecting MEMCACHE .
     protecting MONGODB .
     protecting OPTION{Nat} .
-    protecting MAP{String, Nat} .
+
 
     including CONFIGURATION .
 
@@ -29,9 +28,9 @@ mod RESERVATION-SERVER is
     op outDate :_ : Nat -> Attribute [ctor] .
     op dateIter :_ : Nat -> Attribute [ctor] .
     op roomCount :_ : Nat -> Attribute [ctor] .
-    op map :_ : Map{String, Nat} -> Attribute [ctor] .
+    op map :_ : Map -> Attribute [ctor] .
     op hotelCap :_ : Nat -> Attribute [ctor] .        *** tmp var 
-    op mapIter :_ : Map{String, Nat} -> Attribute [ctor] . *** tmp var
+    op mapIter :_ : Map -> Attribute [ctor] . *** tmp var
 
     
 
@@ -52,26 +51,25 @@ mod RESERVATION-SERVER is
 
 
     *** utility functions
-    op formatKey : Nat Nat -> String . 
     op branch : Bool Configuration Configuration -> Configuration .
 
     
 
 
     vars client-id server-id memcache-id mongodb-id : Oid .
-    var customer-name key : String .
+    var customer-name : String .
     vars session-id hotel-id in-date out-date room-count date-iter hotel-cap value : Nat .
     var condition : Bool .
-    var occupiedRoomMap : Map{String, Nat} .
+    var occupiedRoomMap : Map .
     vars true-branch false-branch : Configuration .
     var cacheLookupResult : Option{Nat} .
     var reservations : Reservations .
     var hotels : Hotels .
     var isWriteSuccess : Bool .
-    var map-iter : Map{String, Nat} .
+    var map-iter : Map .
+    var key : CacheKey .
 
 
-    eq formatKey(hotel-id, in-date) = string(hotel-id, 10) + "_" + string(in-date, 10) .
 
     eq branch(true, true-branch, false-branch) = true-branch .
     eq branch(false, true-branch, false-branch) = false-branch .
@@ -122,7 +120,7 @@ mod RESERVATION-SERVER is
         branch(
             (date-iter < out-date),
             (   
-                getRequest(server-id, memcache-id, session-id, formatKey(hotel-id, date-iter)) 
+                getRequest(server-id, memcache-id, session-id, occupKey(hotel-id, date-iter)) 
                 < server-id : Thread | 
                     state : occupancyCacheReadWait ,
                     clientId : client-id ,
@@ -192,7 +190,7 @@ mod RESERVATION-SERVER is
                 >
             ) ,
             (
-                getRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap")
+                getRequest(server-id, memcache-id, session-id, capKey(hotel-id))
                 < server-id : Thread | 
                     state : capCacheReadWait ,       *** look up hotel capacity in cache
                     clientId : client-id ,
@@ -204,7 +202,7 @@ mod RESERVATION-SERVER is
                     dateIter : date-iter ,       
                     roomCount : room-count ,
                     *** todo: fix option typing
-                    map : insert(formatKey(hotel-id, date-iter),  value(cacheLookupResult) + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
+                    map : insert(occupKey(hotel-id, date-iter),  value(cacheLookupResult) + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
                     memcache : memcache-id , mongodb : mongodb-id 
                 >
             )
@@ -227,7 +225,7 @@ mod RESERVATION-SERVER is
             memcache : memcache-id , mongodb : mongodb-id 
         >
         =>
-        getRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap")
+        getRequest(server-id, memcache-id, session-id, capKey(hotel-id))
         < server-id : Thread | 
             state : capCacheReadWait ,       *** look up hotel capacity in cache
             clientId : client-id ,
@@ -238,7 +236,7 @@ mod RESERVATION-SERVER is
             outDate : out-date ,
             dateIter : date-iter ,       
             roomCount : room-count ,
-            map : insert(formatKey(hotel-id, date-iter),  countTotalOccupancy(reservations) + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
+            map : insert(occupKey(hotel-id, date-iter),  countTotalOccupancy(reservations) + room-count,   occupiedRoomMap) ,  *** document occupancy in local map
             memcache : memcache-id , mongodb : mongodb-id 
         > .
 
@@ -280,7 +278,7 @@ mod RESERVATION-SERVER is
             ) ,
             (
                 branch(
-                    (value(cacheLookupResult) < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
+                    (value(cacheLookupResult) < room-count + value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
                     *** failure upon exceeding capacity
                     < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
                     *** passes capacity check for current date, jump back to loop head
@@ -323,7 +321,7 @@ mod RESERVATION-SERVER is
             < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
             *** write back to cache
             (
-                setRequest(server-id, memcache-id, session-id, string(hotel-id, 10) + "_cap", getHotelCap(hotels))
+                setRequest(server-id, memcache-id, session-id, capKey(hotel-id), getHotelCap(hotels))
                 < server-id : Thread | 
                     state : capCacheWriteWait ,        *** wait for cache write response
                     clientId : client-id ,
@@ -359,7 +357,7 @@ mod RESERVATION-SERVER is
         >
         =>
         branch(
-            (hotel-cap < room-count + occupiedRoomMap[formatKey(hotel-id, date-iter)]) ,
+            (hotel-cap < room-count + value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
             *** failure due to exceeding capacity
             < server-id : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
             < server-id : Thread | 

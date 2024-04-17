@@ -1,36 +1,83 @@
+mod CACHE is 
+
+    protecting NAT .
+    protecting OPTION{Nat} .
+
+    sorts CacheKey Entry Map .
+    subsort Entry < Map .
+
+
+    vars key : CacheKey .
+    vars map : Map .
+    vars value value' : Nat .
+
+
+    op occupKey : Nat Nat -> CacheKey .      *** hotel-id, date
+    op capKey : Nat -> CacheKey .            *** hotel-id 
+
+    op _|->_ : CacheKey Nat -> Entry .
+    op empty : -> Map .
+    op _,_ : Map Map -> Map [ctor assoc comm id: empty ] .
+
+    op insert : CacheKey Nat Map -> Map .
+    op hasMapping : Map CacheKey -> Bool .
+    op _[_] : Map CacheKey -> Option{Nat} .
+
+
+    eq hasMapping((map, key |-> value), key) = true .
+    eq hasMapping(map, key) = false [owise] .
+
+    
+    eq insert(key, value, (map, key |-> value'))
+        = if hasMapping(map, key)
+            then insert(key, value, map)
+            else (map, key |-> value)
+            fi .
+
+    eq insert(key, value, map) = (map, key |-> value) [owise] .
+
+
+    eq (map, key |-> value)[key] = if hasMapping(map, key) then none else some(value) fi .
+    eq map[key] = none [owise] .
+
+
+endm
+
+
+
+
 mod MEMCACHE is 
     protecting NAT .
     protecting STRING .
-    protecting MAP{String, Nat} .
-    protecting OPTION{Nat} .
+    protecting CACHE .
     including CONFIGURATION .
+
+    
 
     *** class definition
     op MemcacheServer : -> Cid [ctor] . 
-    op datastore :_ : Map{String, Nat} -> Attribute [ctor] . 
+    op datastore :_ : Map -> Attribute [ctor] . 
 
     
 
     *** messages
-    op getRequest : Oid Oid Nat String -> Msg [ctor] .  *** senderID, receiverID, sessionID, key
+    op getRequest : Oid Oid Nat CacheKey -> Msg [ctor] .  *** senderID, receiverID, sessionID, key
     op getResponse : Oid Oid Nat Option{Nat} -> Msg [ctor] . *** senderID, receiverID, sessionID, value
-    op setRequest : Oid Oid Nat String Nat -> Msg [ctor] . *** senderID, receiverID, sessionID, key, value
+    op setRequest : Oid Oid Nat CacheKey Nat -> Msg [ctor] . *** senderID, receiverID, sessionID, key, value
     op setResponse : Oid Oid Nat -> Msg [ctor] . *** senderID, receiverID, sessionID
 
+
     vars client-0 memcache-0 : Oid .
-    var datastore-0 : Map{String, Nat} .
+    var datastore-0 : Map .
     vars sessionID-0 value-0 : Nat .
-    var key-0 : String .
+    var key-0 : CacheKey .
 
 
     rl [handle-get] : 
         < memcache-0 : MemcacheServer | datastore : datastore-0 >
         getRequest(client-0, memcache-0, sessionID-0, key-0)
-        => if datastore-0[key-0] == undefined
-                then < memcache-0 : MemcacheServer | datastore : datastore-0 > getResponse(memcache-0, client-0, sessionID-0, none)
-                else < memcache-0 : MemcacheServer | datastore : datastore-0 > getResponse(memcache-0, client-0, sessionID-0, some(datastore-0[key-0]))
-
-           fi .
+        => 
+        < memcache-0 : MemcacheServer | datastore : datastore-0 > getResponse(memcache-0, client-0, sessionID-0, datastore-0[key-0]) .
 
     rl [handle-set] :
         < memcache-0 : MemcacheServer | datastore : datastore-0 >
