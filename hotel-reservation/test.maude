@@ -8,31 +8,16 @@ load reservation-server .
 mod TEST is
     protecting RESERVATION-SERVER .
 
-
-
-    
-
-
     vars client-0 server-0 memcache-0 mongodb-0 : Oid .
     vars C : Configuration .
-    vars customer-name : String .
+    vars customer-name customer-name' : String .
     vars session-id thread-counter in-date hotel-id room-count : Nat .
-
-    
-    *** a trvial request
-    
-
-
-    *** a valid request
-    --- eq test1 = 
-    ---     reservationRequest(client-0, server-0, 0, "John Doe", 0, 0, 1, 1)
-    ---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0 >
-    ---     < memcache-0 : MemcacheServer | datastore : empty >
-    ---     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : (hotel(0, 10), empty) > .
 
 endm
 
 
+
+*** requested hotel does not exist
 search in TEST : 
     reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, 0, 1, room-count)
     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
@@ -41,12 +26,40 @@ search in TEST :
     =>! C .
 
 
-
+***  hotel capcity exceeded
 search in TEST : 
     reservationRequest(client-0, server-0, session-id, customer-name, 0, 0, 1, 10)
     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
     < memcache-0 : MemcacheServer | datastore : empty >
     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
+    =>! C .
+
+
+***  total room reservation count exceeds hotel capcity
+search in TEST : 
+    reservationRequest(client-0, server-0, session-id, customer-name, 0, 0, 1, 5)
+    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+    < memcache-0 : MemcacheServer | datastore : empty >
+    < mongodb-0 : MongDBServer | reservationTable : reservation(0, customer-name', 0, 1, 6) , hotelTable : hotel(0, 10) >
+    =>! C .
+
+
+*** a valid reservation
+search in TEST : 
+    reservationRequest(client-0, server-0, session-id, customer-name, 0, 0, 1, 5)
+    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+    < memcache-0 : MemcacheServer | datastore : empty >
+    < mongodb-0 : MongDBServer | reservationTable : reservation(0, customer-name', 0, 1, 5) , hotelTable : hotel(0, 10) >
+    =>! C .
+
+
+*** multiple requests on different hotels, session 1 should fail
+search in TEST : 
+    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 1, 5)
+    reservationRequest(client-0, server-0, 1, customer-name, 1, 0, 1, 5)
+    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+    < memcache-0 : MemcacheServer | datastore : empty >
+    < mongodb-0 : MongDBServer | reservationTable : reservation(0, customer-name', 0, 1, 5) , hotelTable : hotel(0, 10) >
     =>! C .
 
 
