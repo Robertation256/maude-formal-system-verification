@@ -63,3 +63,39 @@ search in TEST :
     =>! C .
 
 
+
+
+*** interesting cases of consistency violation when multiple requests on the same hotel
+
+*** due to the lack of database transaction, two competing request can go through at the same time
+*** both requests observes 0 existing reservations in the database during the process
+search in TEST : 
+    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 1, 6)
+    reservationRequest(client-0, server-0, 1, customer-name, 0, 0, 1, 5)
+    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+    < memcache-0 : MemcacheServer | datastore : empty >
+    < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
+    =>! C .
+
+
+*** due to the lack of memcache atomic incrementation
+*** cache can become inconsistent with the database
+search in TEST : 
+    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 1, 5)
+    reservationRequest(client-0, server-0, 1, customer-name, 0, 0, 1, 5)
+    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+    < memcache-0 : MemcacheServer | datastore : empty >
+    < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
+    =>! C .
+
+
+
+*** lessons learned:
+*** 1. either provide a semantics+memory model for modelling generic code snippets or model it as a FSM that encodes control flow information.
+*** 2. avoid over-simulations that can stall symbolic evaluation (ie, encoding hotel-id and date into string as cache key)
+
+
+
+
+
+
