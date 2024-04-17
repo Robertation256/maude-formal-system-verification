@@ -5,26 +5,32 @@ mod MEMCACHE-TEST is
     ops testGet0 testGet1 testSet : -> Configuration .
     ops CLIENT-0 MEMCACHE-0 : -> Oid .
 
-    op data : -> Map{String, String} .
+    op data : -> Map .
 
     eq data =
-        insert ("a", "A", 
-            insert("b", "B", 
-                insert("c", "C", empty)
+        insert (capKey(0), 0 ,
+            insert(occupKey(1, 2), 3, 
+                insert(capKey(1), 2, empty)
             )
         ) .
 
 
     eq testGet0 =
         < MEMCACHE-0 : MemcacheServer | datastore : data >
-        getRequest(CLIENT-0, MEMCACHE-0, 1, "a") .
+        getRequest(CLIENT-0, MEMCACHE-0, 1, capKey(0)) .
 
     eq testGet1 =
         < MEMCACHE-0 : MemcacheServer | datastore : data >
-        getRequest(CLIENT-0, MEMCACHE-0, 1, "z") .
+        getRequest(CLIENT-0, MEMCACHE-0, 1, occupKey(1, 2)) .
 
     eq testSet =
         < MEMCACHE-0 : MemcacheServer | datastore : data >
-        setRequest(CLIENT-0, MEMCACHE-0, 1, "d", "D") .
+        setRequest(CLIENT-0, MEMCACHE-0, 1, capKey(9), 9) .
 
 endm
+
+rew in MEMCACHE-TEST : testGet0 .
+
+rew in MEMCACHE-TEST : testGet1 .
+
+rew in MEMCACHE-TEST : testSet .
