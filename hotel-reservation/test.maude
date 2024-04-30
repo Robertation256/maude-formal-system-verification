@@ -1,6 +1,7 @@
 load option .
 load memcache .
 load mongodb .
+load compare .
 load reservation-server .
 
 
@@ -11,82 +12,81 @@ mod TEST is
     vars client-0 server-0 memcache-0 mongodb-0 : Oid .
     vars C : Configuration .
     vars customer-name customer-name' : String .
-    vars session-id thread-counter in-date hotel-id room-count : Nat .
+    vars session-id session-0 session-1 thread-counter in-date hotel-id hotel-id' room-count x y : Nat .
 
 endm
 
 
 
-*** requested hotel does not exist
-search in TEST : 
-    reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, 0, 1, room-count)
-    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
-    < memcache-0 : MemcacheServer | datastore : empty >
-    < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : empty >
-    =>! C .
+--- *** requested hotel does not exist
+--- search in TEST : 
+---     reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, in-date, s(in-date), room-count)
+---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+---     < memcache-0 : MemcacheServer | datastore : empty >
+---     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : empty >
+---     =>! C .
 
 
-***  hotel capcity exceeded
-search in TEST : 
-    reservationRequest(client-0, server-0, session-id, customer-name, 0, 0, 1, 10)
-    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
-    < memcache-0 : MemcacheServer | datastore : empty >
-    < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
-    =>! C .
+--- ***  hotel capcity exceeded
+--- search in TEST : 
+---     reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, in-date, s(in-date), s(room-count))
+---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+---     < memcache-0 : MemcacheServer | datastore : empty >
+---     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(hotel-id, room-count) >
+---     =>! C .
 
 
-***  total room reservation count exceeds hotel capcity
-search in TEST : 
-    reservationRequest(client-0, server-0, session-id, customer-name, 0, 0, 1, 5)
-    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
-    < memcache-0 : MemcacheServer | datastore : empty >
-    < mongodb-0 : MongDBServer | reservationTable : reservation(0, customer-name', 0, 1, 6) , hotelTable : hotel(0, 10) >
-    =>! C .
+--- ***  total room reservation count exceeds hotel capcity
+--- search in TEST : 
+---     reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, in-date, s(in-date), room-count)
+---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+---     < memcache-0 : MemcacheServer | datastore : empty >
+---     < mongodb-0 : MongDBServer | reservationTable : reservation(hotel-id, customer-name', in-date, s(in-date), s(x)) , hotelTable : hotel(hotel-id,  room-count) >
+---     =>! C .
 
 
-*** a valid reservation
-search in TEST : 
-    reservationRequest(client-0, server-0, session-id, customer-name, 0, 0, 1, 5)
-    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
-    < memcache-0 : MemcacheServer | datastore : empty >
-    < mongodb-0 : MongDBServer | reservationTable : reservation(0, customer-name', 0, 1, 5) , hotelTable : hotel(0, 10) >
-    =>! C .
+--- *** a valid reservation
+--- search in TEST : 
+---     reservationRequest(client-0, server-0, session-id, customer-name, hotel-id, in-date, s(in-date), room-count)
+---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+---     < memcache-0 : MemcacheServer | datastore : empty >
+---     < mongodb-0 : MongDBServer | reservationTable : reservation(hotel-id, customer-name', in-date, s(in-date), s(x)) , hotelTable : hotel(hotel-id, s (room-count + x )) >
+---     =>! C .
 
 
-*** multiple requests on different hotels, session 1 should fail
-search in TEST : 
-    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 1, 5)
-    reservationRequest(client-0, server-0, 1, customer-name, 1, 0, 1, 5)
-    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
-    < memcache-0 : MemcacheServer | datastore : empty >
-    < mongodb-0 : MongDBServer | reservationTable : reservation(0, customer-name', 0, 1, 5) , hotelTable : hotel(0, 10) >
-    =>! C .
+--- *** multiple requests on different hotels, session 1 should fail
+--- search in TEST : 
+---     reservationRequest(client-0, server-0, session-0, customer-name, hotel-id, in-date, s in-date, room-count)
+---     reservationRequest(client-0, server-0, session-1, customer-name, hotel-id', in-date, s in-date, room-count)
+---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+---     < memcache-0 : MemcacheServer | datastore : empty >
+---     < mongodb-0 : MongDBServer | reservationTable : reservation(hotel-id, customer-name', in-date, s in-date, s(x)) , hotelTable : hotel(hotel-id, s(room-count + x)) >
+---     =>! C .
 
 
 
+--- *** interesting cases of consistency violation when multiple requests on the same hotel
 
-*** interesting cases of consistency violation when multiple requests on the same hotel
-
-*** due to the lack of database transaction, two competing request can go through at the same time
-*** both requests observes 0 existing reservations in the database during the process
-search in TEST : 
-    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 1, 6)
-    reservationRequest(client-0, server-0, 1, customer-name, 0, 0, 1, 5)
-    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
-    < memcache-0 : MemcacheServer | datastore : empty >
-    < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
-    =>! C .
+--- *** due to the lack of database transaction, two competing request can go through at the same time
+--- *** both requests observes 0 existing reservations in the database during the process
+--- search in TEST : 
+---     reservationRequest(client-0, server-0, session-0, customer-name, hotel-id, in-date, s in-date, room-count)
+---     reservationRequest(client-0, server-0, session-1, customer-name', hotel-id, in-date, s in-date, room-count)
+---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+---     < memcache-0 : MemcacheServer | datastore : empty >
+---     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(hotel-id, room-count) >
+---     =>! C .
 
 
 *** due to the lack of memcache atomic incrementation
 *** cache can become inconsistent with the database
-search in TEST : 
-    reservationRequest(client-0, server-0, 0, customer-name, 0, 0, 5, 5)
-    reservationRequest(client-0, server-0, 1, customer-name, 0, 0, 5, 5)
-    < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
-    < memcache-0 : MemcacheServer | datastore : empty >
-    < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(0, 10) >
-    =>! C .
+--- search in TEST : 
+---     reservationRequest(client-0, server-0, session-0, customer-name, hotel-id, in-date, s s in-date, s(x))
+---     reservationRequest(client-0, server-0, session-1, customer-name, hotel-id, in-date, s s in-date, s(y))
+---     < server-0 : ReservationServer | memcache : memcache-0 , mongodb : mongodb-0, threadCounter : thread-counter >
+---     < memcache-0 : MemcacheServer | datastore : empty >
+---     < mongodb-0 : MongDBServer | reservationTable : empty , hotelTable : hotel(hotel-id, s x + s y) >
+---     =>! C .
 
 
 

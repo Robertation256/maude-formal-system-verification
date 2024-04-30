@@ -5,6 +5,7 @@ mod RESERVATION-SERVER is
     protecting MEMCACHE .
     protecting MONGODB .
     protecting OPTION{Nat} .
+    protecting LOOSE-COMPARE .
 
     including CONFIGURATION .
 
@@ -53,8 +54,6 @@ mod RESERVATION-SERVER is
 
     *** utility functions
     op branch : Bool Configuration Configuration -> Configuration .
-
-
     op _/_ : Oid Nat -> Oid .
 
     
@@ -122,7 +121,7 @@ mod RESERVATION-SERVER is
         >
         =>
         branch(
-            (date-iter < out-date),
+            (date-iter <? out-date),
             (   
                 getRequest(server-id / thread-counter, memcache-id, session-id, occupKey(hotel-id, date-iter)) 
                 < server-id / thread-counter : Thread | 
@@ -282,7 +281,7 @@ mod RESERVATION-SERVER is
             ) ,
             (
                 branch(
-                    (value(cacheLookupResult) < value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
+                    (value(cacheLookupResult) <? value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
                     *** failure upon exceeding capacity
                     < server-id / thread-counter : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
                     *** passes capacity check for current date, jump back to loop head
@@ -361,7 +360,7 @@ mod RESERVATION-SERVER is
         >
         =>
         branch(
-            (hotel-cap < value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
+            (hotel-cap <? value(occupiedRoomMap[occupKey(hotel-id, date-iter)])) ,
             *** failure due to exceeding capacity
             < server-id / thread-counter : Thread | state : reservationFailed , clientId : client-id , sessionId : session-id > , 
             < server-id / thread-counter : Thread | 
@@ -488,7 +487,7 @@ mod RESERVATION-SERVER is
         >
         =>
         branch(
-            (date-iter < out-date) ,
+            (date-iter <? out-date) ,
             (
                 insertReservationRequest(server-id / thread-counter, mongodb-id, session-id, reservation(hotel-id, customer-name, date-iter, s(date-iter), room-count))
                 < server-id / thread-counter : Thread |              
