@@ -1,0 +1,39 @@
+fmod LOOSE-COMPARE is protecting NAT .
+
+    
+
+    op _<?_ : Nat Nat -> Bool .
+
+    vars x y z : Nat .
+
+    eq x <? x = false .
+    eq s(x) <? s(y) = x <? y [owise].
+    eq x <? s(y) = if x == y then true else x <? y fi [owise].
+    eq s(x) <? y = if x == y then false else x <? y fi [owise].
+
+
+    *** compare a + b <? c or a <? b+c
+    eq 0 <? x + s(y) = true .
+    eq x <? x + s(y) = true .
+    eq x <? 0 + y = x <? y .
+    eq s(x) <? s(y) + z = x <? y + z .
+    *** since we assume the expr is of form s ... x <? s ... x + y, if the left-hand side is reduced to x first, we know right-hand side is bigger
+    eq x <? y + z = true [owise].  
+
+
+    eq  x + s(y) <? 0 = false . 
+    eq  x + s(y) <? x = false .
+    eq x + 0 < y = x <? y .
+    eq s(x) + z <? s(y) = x + z <? y .
+
+
+
+
+    
+
+
+
+    
+    
+
+endfm
