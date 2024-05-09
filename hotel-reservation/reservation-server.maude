@@ -549,26 +549,4 @@ mod RESERVATION-SERVER is
         =>
         reservationResponse(server-id, client-id, session-id, none) .
 
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-    
-
-
 endm
